@@ -456,11 +456,11 @@ The CLI block above keeps the longer print. The page shot under it is the same e
 
 ![Same prices on the page, with a funding hold and two partial closes. Liquidation still prints 90.55, under the stop. The target rows show the close percent, the R, and the net, then the blend.](docs/images/calc-perps.png)
 
-### Chart of the fee long
+### Chart of a real long
 
-Entry 100. Stop 95. Liquidation 90.548014. The stop sits 4.451986 above liquidation, so the stop is the first of the two prices. Bankruptcy is 90.05, on the safer side of liquidation. The size is 19.61746 base, notional 1961.746, margin 196.174595.
+The prices above are round numbers. This chart puts the same kind of long on real prices: the OKX BTC-USDT-SWAP daily candle for 2026-09-03 from [Historical checks](#historical-checks). Entry 77,303.7 is that day's open. The stop at 76,204.5 is the prior day's low. TP1 at 81,228.7 is the day's close and TP2 at 82,279.9 is the day's high, half the size at each. Liquidation at the 10x cap is 69,852.7, far under the stop, so the stop is the first of the two prices. The day's low was 76,926, above the stop. Candles later in September trade under the stop line. The check covers 2026-09-03 only.
 
-<!-- docs/images/tv-perp-long.png -->
+![OKX BTCUSDT perp, daily candles. Long from 77,303.7 on 3 Sep 2026. Stop 76,204.5 at the prior day's low. TP1 81,228.7 closes 50 percent and TP2 82,279.9 closes 50 percent. Liquidation at 10x is 69,852.7, well under the stop.](docs/images/tv-perp-long.png)
 
 ### Perp short with no fees
 
@@ -566,9 +566,9 @@ The stop is 90. Liquidation is 95.477387. Distance is -5.477387. Bankruptcy is 9
 
 ### Chart of liquidation before the stop
 
-Entry 100. Stop 90. Liquidation 95.477387, between the entry and the stop. Distance -5.477387. Margin at the 20x cap is 50. The loss if the stop filled would be the budget of 100. The model closes the position on the way there.
+The same BTC long, entry 77,303.7 on 2026-09-03, with the cap raised to 20x and a wide stop at 72,000. The 72,000 stop is an input for this chart, not part of the historical checks. With maintenance margin 0.004, liquidation is `77303.7 * (1 - 1/20) / (1 - 0.004) = 73733.45`. That is above the stop. A long falling from the entry reaches 73,733.4 first, so the venue closes the position before the stop can fill. The planned stop loss never happens. At 10x the same formula gives 69,852.7, under the stop, which is the safe order in the chart above.
 
-<!-- docs/images/tv-perp-liq-before-stop.png -->
+![OKX BTCUSDT perp, daily candles. Long from 77,303.7 at 20x. Liquidation 73,733.4 sits above the stop at 72,000, so liquidation hits before the stop.](docs/images/tv-perp-liq-before-stop.png)
 
 ### Constant product from 100 to 400
 
@@ -647,11 +647,11 @@ The hosted page marks that range at the upper price. IL versus holding prints as
 
 ![DeFi tab, one range. Entry 100, lower 81, upper 121, price now 121, deposit 1000. The position is all quote and IL versus holding is minus 4.76 percent. Copy link sits by the tabs.](docs/images/calc-defi.png)
 
-### Chart of the range
+### Chart of a real range
 
-Deposit 1,000 at 100. Lower bound 81. Upper bound 121. Square roots 9, 10, and 11. At 121 the position is all quote, value 1047.619, IL -0.04761905. At 81 it is all base, value 857.142857, IL -0.05759162.
+The range above uses round numbers. This chart is the concentrated range from [Historical checks](#historical-checks), drawn on OKX ETH-USDT-SWAP daily candles. The lower bound 2,355.56 is the lowest low from 2026-08-29 to 2026-09-07. The upper bound 2,548.37 is the highest high in that window. Entry is the 29 Aug close, 2,456.4. The mark is the 7 Sep close, 2,488.99. On a 10,000 deposit the position is worth 10,050.80 at the mark. Holding the starting coins would be worth 10,062.03. IL versus holding is about -0.11 percent. Candles after 7 Sep are outside the window, and several trade above the upper bound.
 
-<!-- docs/images/tv-lp-range.png -->
+![OKX ETHUSDT perp, daily candles. LP range from lower 2,355.56 to upper 2,548.37. Entry 2,456.4 on 29 Aug. Marked 2,488.99 on 7 Sep, IL versus holding about -0.11 percent on a 10,000 deposit.](docs/images/tv-lp-range.png)
 
 ### Deposit size
 

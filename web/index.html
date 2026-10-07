@@ -9,12 +9,19 @@
   </head>
   <body>
     <header>
-      <p class="kicker">position-sizer</p>
-      <h1>Size the loss first.</h1>
-      <p class="sub">
-        Perps and liquidity. Fees in. If liquidation sits before the stop, the page says so in the same view as the
-        size.
-      </p>
+      <div class="hero-bar">
+        <div class="hero-copy">
+          <p class="kicker">position-sizer</p>
+          <h1>Size the loss first.</h1>
+          <p class="sub">
+            Perps and liquidity. Fees in. If liquidation sits before the stop, the page says so in the same view as the
+            size.
+          </p>
+        </div>
+        <a class="brand" href="https://accompli.sh"
+          ><img src="accomplish-pill.png" alt="Accomplish" width="561" height="132"
+        /></a>
+      </div>
     </header>
     <div class="band" aria-hidden="true"></div>
     <div class="wrap">
@@ -223,17 +230,18 @@
         </div>
       </section>
     </div>
-    <div class="band sparse" aria-hidden="true"></div>
     <footer>
-      <p>
-        Not financial advice. Past results do not predict future results. The page runs the same formulas as the
-        library. Nothing you type is sent anywhere.
-      </p>
-      <p>
-        Formulas: <a href="https://github.com/accomplish999/position-sizer/blob/main/docs/PERPS.md">perps</a>,
-        <a href="https://github.com/accomplish999/position-sizer/blob/main/docs/DEFI.md">DeFi</a>.
-        <a href="https://github.com/accomplish999/position-sizer">Source</a>. MIT.
-      </p>
+      <div class="band" aria-hidden="true"></div>
+      <div class="foot-bar">
+        <p>Not financial advice. Past results do not predict future results.</p>
+        <p>
+          Nothing you type is sent.
+          <a href="https://github.com/accomplish999/position-sizer/blob/main/docs/PERPS.md">Perps</a>
+          <a href="https://github.com/accomplish999/position-sizer/blob/main/docs/DEFI.md">DeFi</a>
+          <a href="https://github.com/accomplish999/position-sizer">Source</a>
+          MIT
+        </p>
+      </div>
     </footer>
     <noscript>This page needs JavaScript to run the calculators. The CLI does not.</noscript>
     <script src="position-sizer.js"></script>

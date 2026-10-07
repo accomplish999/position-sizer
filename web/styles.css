@@ -22,6 +22,7 @@ body {
   font-size: 14px;
   line-height: 1.45;
   min-height: 100vh;
+  padding-bottom: var(--foot-h, 72px);
 }
 
 a {
@@ -85,11 +86,43 @@ input[type="checkbox"] {
 header {
   background: var(--ink);
   color: var(--paper);
-  padding: 28px 24px 22px;
+  padding: 28px 0;
 }
 
-header a {
+header a,
+footer a {
   color: var(--paper);
+}
+
+header a:focus-visible,
+footer a:focus-visible {
+  outline: 2px solid var(--paper);
+  outline-offset: 3px;
+}
+
+.hero-bar {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.hero-copy {
+  min-width: 0;
+}
+
+.brand {
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.brand img {
+  display: block;
+  height: 40px;
+  width: auto;
 }
 
 .kicker {
@@ -261,25 +294,33 @@ dd {
 
 .ruler {
   position: relative;
-  height: 64px;
-  margin: 14px 0 4px;
+  margin: 14px 0 8px;
   border-bottom: 2px solid var(--ink);
+  overflow: hidden;
 }
 
 .mark {
   position: absolute;
   top: 0;
-  transform: translateX(-50%);
-  text-align: center;
+  bottom: 0;
+  width: 0;
+}
+
+.mark .lab {
+  position: absolute;
   font-size: 11px;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
 .mark i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
   display: block;
   width: 1px;
-  height: 18px;
-  margin: 22px auto 0;
+  height: 12px;
+  margin: 0;
   background: var(--ink);
   font-style: normal;
 }
@@ -308,15 +349,29 @@ pre {
 }
 
 footer {
-  border-top: 1px solid var(--ink);
-  padding: 16px 20px 28px;
-  max-width: 1040px;
-  margin: 0 auto;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  background: var(--ink);
+  color: var(--paper);
   font-size: 12px;
 }
 
-footer p {
-  margin: 0 0 8px;
+.foot-bar {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 10px 20px 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.foot-bar p {
+  margin: 0;
+  white-space: nowrap;
 }
 
 [hidden] {
@@ -326,6 +381,11 @@ footer p {
 @media (max-width: 800px) {
   header h1 {
     font-size: 34px;
+    max-width: 100%;
+  }
+
+  .brand img {
+    height: 32px;
   }
 
   .layout,
@@ -335,5 +395,17 @@ footer p {
 
   .out .hero {
     font-size: 28px;
+  }
+
+  .foot-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .foot-bar p {
+    white-space: normal;
   }
 }

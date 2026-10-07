@@ -1,4 +1,17 @@
 (function () {
+  function syncFooter() {
+    const footer = document.querySelector("footer");
+    if (!footer) return;
+    const apply = function () {
+      document.body.style.setProperty("--foot-h", footer.offsetHeight + "px");
+    };
+    apply();
+    if (typeof ResizeObserver === "function") new ResizeObserver(apply).observe(footer);
+    else window.addEventListener("resize", apply);
+  }
+
+  syncFooter();
+
   const PS = globalThis.PositionSizer;
   if (!PS) {
     const slot = document.getElementById("perp-out");
@@ -6,12 +19,75 @@
     return;
   }
 
-  function num(value) {
+  function decimalsOf(text) {
+    const match = String(text)
+      .trim()
+      .match(/\.(\d+)/);
+    return match ? match[1].length : 0;
+  }
+
+  function priceDp() {
+    let dp = 0;
+    ["entry", "stop"].forEach(function (id) {
+      dp = Math.max(dp, decimalsOf(read(id)));
+    });
+    read("targets")
+      .split(",")
+      .forEach(function (part) {
+        dp = Math.max(dp, decimalsOf(part));
+      });
+    if (dp < 2) dp = 2;
+    if (dp > 8) dp = 8;
+    return dp;
+  }
+
+  function formatFixed(value, digits) {
     if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    return value.toFixed(digits);
+  }
+
+  function formatSig(value, sig) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    if (value === 0) return "0";
     const abs = Math.abs(value);
-    const digits = abs === 0 ? 2 : abs >= 1000 ? 4 : abs >= 1 ? 6 : 8;
-    const text = value.toFixed(digits);
-    return text.includes(".") ? text.replace(/\.?0+$/, "") : text;
+    const exp = Math.floor(Math.log10(abs));
+    const decimals = sig - 1 - exp;
+    if (decimals >= 0) {
+      return value
+        .toFixed(decimals)
+        .replace(/(\.\d*?)0+$/, "$1")
+        .replace(/\.$/, "");
+    }
+    const factor = 10 ** -decimals;
+    return String(Math.round(value / factor) * factor);
+  }
+
+  function formatPrice(value) {
+    return formatFixed(value, priceDp());
+  }
+
+  function formatMoney(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    if (value !== 0 && Math.abs(value) < 0.005) return formatSig(value, 4);
+    return value.toFixed(2);
+  }
+
+  function formatSize(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    return formatSig(value, Math.abs(value) >= 1 ? 6 : 4);
+  }
+
+  function formatFrac(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    return value
+      .toFixed(4)
+      .replace(/(\.\d*?)0+$/, "$1")
+      .replace(/\.$/, "");
+  }
+
+  function formatPct(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    return value.toFixed(2) + "%";
   }
 
   function read(id) {
@@ -103,6 +179,80 @@
     };
   }
 
+  let rulerWatch = null;
+
+  function layoutRuler(ruler) {
+    if (!ruler) return;
+    const width = ruler.clientWidth;
+    if (!(width > 0)) return;
+    const key = String(Math.round(width));
+    if (ruler.dataset.w === key) return;
+    const marks = Array.from(ruler.querySelectorAll(".mark"));
+    const gap = 6;
+    const tick = 14;
+    const items = marks.map(function (mark) {
+      const x = Number(mark.dataset.x) * width;
+      const lab = mark.querySelector(".lab");
+      const w = lab.offsetWidth;
+      const h = lab.offsetHeight;
+      let left = x - w / 2;
+      if (left < 0) left = 0;
+      if (left + w > width) left = Math.max(0, width - w);
+      return { mark: mark, lab: lab, x: x, w: w, h: h, left: left, row: 0 };
+    });
+    items.sort(function (a, b) {
+      return a.x - b.x;
+    });
+    const rows = [];
+    items.forEach(function (item) {
+      let row = 0;
+      for (;;) {
+        const slots = rows[row] || [];
+        const hit = slots.some(function (slot) {
+          return item.left < slot.right + gap && item.left + item.w > slot.left - gap;
+        });
+        if (!hit) {
+          if (!rows[row]) rows[row] = [];
+          rows[row].push({ left: item.left, right: item.left + item.w });
+          item.row = row;
+          break;
+        }
+        row += 1;
+        if (row > 12) {
+          item.row = row;
+          break;
+        }
+      }
+    });
+    let maxRow = 0;
+    let block = 24;
+    items.forEach(function (item) {
+      if (item.row > maxRow) maxRow = item.row;
+      if (item.h > block) block = item.h;
+    });
+    const pitch = block + 4;
+    ruler.style.height = tick + (maxRow + 1) * pitch + "px";
+    items.forEach(function (item) {
+      item.mark.style.left = item.x + "px";
+      item.lab.style.left = item.left - item.x + "px";
+      item.lab.style.bottom = tick + item.row * pitch + "px";
+    });
+    ruler.dataset.w = key;
+  }
+
+  function bindRuler() {
+    const ruler = document.querySelector("#perp-out .ruler");
+    if (!ruler) return;
+    layoutRuler(ruler);
+    if (rulerWatch) rulerWatch.disconnect();
+    if (typeof ResizeObserver === "function") {
+      rulerWatch = new ResizeObserver(function () {
+        layoutRuler(ruler);
+      });
+      rulerWatch.observe(ruler);
+    }
+  }
+
   function ruler(result) {
     const marks = [
       { name: "stop", price: result.stop },
@@ -122,9 +272,15 @@
       '<div class="ruler">' +
       marks
         .map(function (mark) {
-          const left = ((mark.price - min) / span) * 100;
+          const x = (mark.price - min) / span;
           return (
-            '<div class="mark" style="left:' + left + '%"><b>' + mark.name + "</b>" + num(mark.price) + "<i></i></div>"
+            '<div class="mark" data-x="' +
+            x +
+            '"><span class="lab"><b>' +
+            mark.name +
+            "</b>" +
+            formatPrice(mark.price) +
+            "</span><i></i></div>"
           );
         })
         .join("") +
@@ -142,7 +298,7 @@
       const notes = result.warnings.filter(function (warning) {
         return warning.severity !== "loud";
       });
-      const liqText = result.liquidation.price > 0 ? num(result.liquidation.price) : "none above 0";
+      const liqText = result.liquidation.price > 0 ? formatPrice(result.liquidation.price) : "none above 0";
       let html = "";
       loud.forEach(function (warning) {
         html += '<div class="warning"><p>' + warning.message + "</p></div>";
@@ -150,46 +306,47 @@
       notes.forEach(function (warning) {
         html += '<p class="note">' + warning.message + "</p>";
       });
-      html += '<p class="hero">' + num(result.qtyBase) + "</p>";
-      html += '<p class="hero-label">base. quote size ' + num(result.qtyQuote) + "</p>";
+      html += '<p class="hero">' + formatSize(result.qtyBase) + "</p>";
+      html += '<p class="hero-label">base. quote size ' + formatMoney(result.qtyQuote) + "</p>";
       html += ruler(result);
       html +=
         "<dl>" +
         rows([
-          ["Notional", num(result.notional)],
-          ["Margin needed", num(result.margin)],
-          ["Effective leverage", num(result.effectiveLeverage)],
-          ["Fee-adjusted risk", num(result.feeAdjustedRisk)],
-          ["Price risk", num(result.priceRisk)],
-          ["Entry fee", num(result.entryFee)],
-          ["Exit fee at stop", num(result.exitFeeAtStop)],
-          ["Funding", num(result.fundingCost)],
+          ["Notional", formatMoney(result.notional)],
+          ["Margin needed", formatMoney(result.margin)],
+          ["Effective leverage", formatFixed(result.effectiveLeverage, 2)],
+          ["Fee-adjusted risk", formatMoney(result.feeAdjustedRisk)],
+          ["Price risk", formatMoney(result.priceRisk)],
+          ["Entry fee", formatMoney(result.entryFee)],
+          ["Exit fee at stop", formatMoney(result.exitFeeAtStop)],
+          ["Funding", formatMoney(result.fundingCost)],
           ["Liquidation", liqText],
-          ["Distance vs stop", num(result.liquidation.distanceFromStop)],
+          ["Distance vs stop", formatPrice(result.liquidation.distanceFromStop)],
           ["Stop hits first", result.liquidation.beforeStop ? "no" : "yes"],
           [
             "Liquidation at cap",
-            result.liquidationAtCap.price > 0 ? num(result.liquidationAtCap.price) : "none above 0",
+            result.liquidationAtCap.price > 0 ? formatPrice(result.liquidationAtCap.price) : "none above 0",
           ],
           [
             "Liquidation, full account",
             result.liquidationIfAccountBacksIt.price > 0
-              ? num(result.liquidationIfAccountBacksIt.price)
+              ? formatPrice(result.liquidationIfAccountBacksIt.price)
               : "none above 0",
           ],
-          ["Bankruptcy", result.bankruptcyPrice > 0 ? num(result.bankruptcyPrice) : "none above 0"],
+          ["Bankruptcy", result.bankruptcyPrice > 0 ? formatPrice(result.bankruptcyPrice) : "none above 0"],
           ["Binding constraint", result.bindingConstraint],
         ]) +
         "</dl>";
       if (result.targets.length) {
         html += "<h2>Targets</h2><dl>";
         result.targets.forEach(function (target) {
-          html += rows([[num(target.price), num(target.rMultiple) + " R"]]);
+          html += rows([[formatPrice(target.price), formatFixed(target.rMultiple, 2) + " R"]]);
         });
         html += "</dl>";
       }
       html += jsonBlock({ warnings: result.warnings, result: result });
       slot.innerHTML = html;
+      bindRuler();
       if (scroll) slot.scrollIntoView({ block: "nearest" });
     } catch (err) {
       showError(slot, err);
@@ -216,17 +373,17 @@
       const result = PS.impermanentLoss(ilInput());
       const html =
         '<p class="hero">' +
-        num(result.ilFraction * 100) +
-        "%</p>" +
+        formatPct(result.ilFraction * 100) +
+        "</p>" +
         '<p class="hero-label">IL versus holding</p><dl>' +
         rows([
-          ["Value now", num(result.now.value)],
-          ["Hold value", num(result.holdValue)],
-          ["IL fraction", num(result.ilFraction)],
-          ["Divergence (quote)", num(result.divergenceQuote)],
-          ["Drawdown vs deposit", num(result.drawdownQuote)],
-          ["Base now", num(result.now.amounts.base)],
-          ["Quote now", num(result.now.amounts.quote)],
+          ["Value now", formatMoney(result.now.value)],
+          ["Hold value", formatMoney(result.holdValue)],
+          ["IL fraction", formatFrac(result.ilFraction)],
+          ["Divergence (quote)", formatMoney(result.divergenceQuote)],
+          ["Drawdown vs deposit", formatMoney(result.drawdownQuote)],
+          ["Base now", formatSize(result.now.amounts.base)],
+          ["Quote now", formatMoney(result.now.amounts.quote)],
           ["In range", result.inRange === null ? "n/a" : result.inRange ? "yes" : "no"],
         ]) +
         "</dl>" +
@@ -256,14 +413,14 @@
       }
       html +=
         '<p class="hero">' +
-        num(result.deployQuote) +
+        formatMoney(result.deployQuote) +
         '</p><p class="hero-label">quote to deploy</p><dl>' +
         rows([
-          ["Loss fraction", num(result.lossFraction)],
-          ["IL fraction", num(result.scenario.ilFraction)],
-          ["Max loss", num(result.maxLossQuote)],
-          ["Scenario loss", num(result.scenarioLossQuote)],
-          ["Left undeployed", num(result.unusedQuote)],
+          ["Loss fraction", formatFrac(result.lossFraction)],
+          ["IL fraction", formatFrac(result.scenario.ilFraction)],
+          ["Max loss", formatMoney(result.maxLossQuote)],
+          ["Scenario loss", formatMoney(result.scenarioLossQuote)],
+          ["Left undeployed", formatMoney(result.unusedQuote)],
           ["Binding", result.bindingConstraint],
         ]) +
         "</dl>" +
@@ -283,14 +440,14 @@
         feeApr: numOf("be-apr") / 100,
         inRangeFraction: numOf("be-in") / 100,
       });
-      const apr = result.breakevenApr === null ? "none" : num(result.breakevenApr * 100) + "%";
+      const apr = result.breakevenApr === null ? "none" : formatPct(result.breakevenApr * 100);
       const html =
         '<p class="hero">' +
         apr +
         '</p><p class="hero-label">fee APR to cover the loss</p><dl>' +
         rows([
-          ["Fee income fraction", num(result.feeIncomeFraction)],
-          ["Net fraction", num(result.netFraction)],
+          ["Fee income fraction", result.feeIncomeFraction == null ? "n/a" : formatFrac(result.feeIncomeFraction)],
+          ["Net fraction", result.netFraction == null ? "n/a" : formatFrac(result.netFraction)],
           ["Fees cover the loss", result.covers ? "yes" : "no"],
         ]) +
         "</dl>" +
@@ -317,14 +474,14 @@
       const result = PS.hedgeRatio(input);
       const html =
         '<p class="hero">' +
-        num(result.hedgeBase) +
+        formatSize(result.hedgeBase) +
         '</p><p class="hero-label">base to short</p><dl>' +
         rows([
-          ["Hedge notional", num(result.hedgeNotional)],
-          ["Hedge ratio", num(result.hedgeRatio)],
-          ["Base in pool", num(result.amounts.base)],
-          ["Quote in pool", num(result.amounts.quote)],
-          ["LP value", num(result.lpValue)],
+          ["Hedge notional", formatMoney(result.hedgeNotional)],
+          ["Hedge ratio", formatFrac(result.hedgeRatio)],
+          ["Base in pool", formatSize(result.amounts.base)],
+          ["Quote in pool", formatMoney(result.amounts.quote)],
+          ["LP value", formatMoney(result.lpValue)],
           ["In range", result.inRange === null ? "n/a" : result.inRange ? "yes" : "no"],
         ]) +
         '</dl><p class="hint">A short of that base size offsets delta at this price. It does not cancel the curved loss.</p>' +

@@ -188,9 +188,9 @@ header h1 {
   align-items: start;
 }
 
+/* Columns sit on the paper. No box around a column of controls or results. */
 .panel {
-  border: 1px solid var(--ink);
-  padding: 14px;
+  min-width: 0;
 }
 
 .panel h2 {
@@ -247,9 +247,14 @@ select {
   margin-top: 6px;
 }
 
+/* Explanatory notes are serif body copy, not mono prose. */
 .hint {
-  margin: 8px 0 0;
-  font-size: 12px;
+  max-width: 36rem;
+  margin: 16px 0 0;
+  font-family: "Newsreader", Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .mono {
@@ -282,9 +287,11 @@ select {
 }
 
 .note {
-  border: 1px solid var(--ink);
-  padding: 8px 10px;
-  margin: 0 0 8px;
+  max-width: 36rem;
+  margin: 0 0 12px;
+  font-family: "Newsreader", Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 dl {
@@ -295,8 +302,7 @@ dl div {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
-  border-top: 1px solid var(--ink);
-  padding: 5px 0;
+  padding: 4px 0;
 }
 
 dt {
@@ -347,9 +353,8 @@ dd {
 }
 
 pre {
-  margin: 12px 0 0;
-  padding: 10px;
-  border: 1px solid var(--ink);
+  margin: 16px 0 0;
+  padding: 0;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 220px;
@@ -359,9 +364,8 @@ pre {
 }
 
 .err {
-  border: 1px solid var(--ink);
-  padding: 10px;
   margin: 0;
+  font-weight: 700;
 }
 
 footer {

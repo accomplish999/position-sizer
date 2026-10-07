@@ -1,0 +1,19 @@
+name: Bug
+description: A wrong number, a crash, or a doc that disagrees with the code.
+title: ""
+labels: []
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Paste the command, the input, and the output. Say what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Node version, and the commit or release you ran.
+    validations:
+      required: true

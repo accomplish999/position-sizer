@@ -1,0 +1,14 @@
+{
+  "accountSize": 10000,
+  "risk": { "mode": "percent", "value": 1 },
+  "entry": 100,
+  "stop": 90,
+  "side": "long",
+  "leverageCap": 20,
+  "takerFee": 0,
+  "makerFee": 0,
+  "fundingRate": 0,
+  "maintenanceMarginRate": 0.005,
+  "marginMode": "isolated",
+  "targets": [110]
+}

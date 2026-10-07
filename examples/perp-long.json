@@ -1,0 +1,17 @@
+{
+  "accountSize": 10000,
+  "risk": { "mode": "percent", "value": 1 },
+  "entry": 100,
+  "stop": 95,
+  "side": "long",
+  "leverageCap": 10,
+  "takerFee": 0.0005,
+  "makerFee": 0.0002,
+  "entryLiquidity": "taker",
+  "exitLiquidity": "taker",
+  "fundingRate": 0,
+  "maintenanceMarginRate": 0.005,
+  "marginMode": "isolated",
+  "entryFeeFromMargin": true,
+  "targets": [110, 120]
+}

@@ -1,0 +1,6 @@
+{
+  "lossFraction": 0.2,
+  "horizonDays": 30,
+  "feeApr": 0.5,
+  "inRangeFraction": 0.5
+}

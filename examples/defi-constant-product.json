@@ -1,0 +1,6 @@
+{
+  "model": "constant-product",
+  "priceEntry": 100,
+  "priceNow": 400,
+  "depositQuote": 1000
+}

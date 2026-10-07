@@ -1,0 +1,47 @@
+{
+  "name": "position-sizer",
+  "version": "0.1.0",
+  "description": "Position size calculators for perpetual futures and liquidity pools.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "position-sizer": "./dist/src/cli.js"
+  },
+  "main": "./dist/src/index.js",
+  "files": [
+    "dist",
+    "docs",
+    "web",
+    "examples",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/accomplish999/position-sizer.git"
+  },
+  "homepage": "https://accomplish999.github.io/position-sizer/",
+  "scripts": {
+    "build": "tsc --pretty false && npm run build:web",
+    "build:web": "esbuild src/browser.ts --bundle --format=iife --global-name=PositionSizer --outfile=web/position-sizer.js --legal-comments=none",
+    "typecheck": "tsc --noEmit --pretty false",
+    "lint": "prettier --check . && markdownlint-cli2",
+    "format": "prettier --write .",
+    "test": "node --import tsx --test test/*.test.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "links": "tsx scripts/check-links.ts",
+    "copy": "tsx scripts/check-copy.ts",
+    "start": "tsx src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "esbuild": "^0.25.5",
+    "markdownlint-cli2": "^0.23.3",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

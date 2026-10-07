@@ -1,0 +1,8 @@
+{
+  "model": "constant-product",
+  "capital": 10000,
+  "maxLoss": { "mode": "percent", "value": 1 },
+  "kind": "il",
+  "priceEntry": 100,
+  "priceScenario": 400
+}

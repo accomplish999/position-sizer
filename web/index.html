@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>position-sizer</title>
+    <link rel="icon" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <p class="kicker">position-sizer</p>
+      <h1>Size the loss first.</h1>
+      <p class="sub">
+        Perps and liquidity. Fees in. If liquidation sits before the stop, the page says so in the same view as the
+        size.
+      </p>
+    </header>
+    <div class="band" aria-hidden="true"></div>
+    <div class="wrap">
+      <nav class="tabs" aria-label="Calculator">
+        <button type="button" id="tab-perp" class="on" aria-selected="true">Perps</button>
+        <button type="button" id="tab-defi" aria-selected="false">DeFi</button>
+      </nav>
+
+      <section id="view-perp">
+        <div class="layout">
+          <form class="panel" id="form-perp">
+            <h2>Inputs</h2>
+            <div class="grid">
+              <label><span>Account (quote)</span><input id="account" value="10000" inputmode="decimal" /></label>
+              <label>
+                <span>Risk mode</span>
+                <select id="risk-mode">
+                  <option value="percent" selected>Percent</option>
+                  <option value="fixed">Fixed quote</option>
+                </select>
+              </label>
+              <label><span>Risk (1 means 1%)</span><input id="risk" value="1" inputmode="decimal" /></label>
+              <label>
+                <span>Side</span>
+                <select id="side">
+                  <option value="long" selected>Long</option>
+                  <option value="short">Short</option>
+                </select>
+              </label>
+              <label><span>Entry</span><input id="entry" value="100" inputmode="decimal" /></label>
+              <label><span>Stop</span><input id="stop" value="95" inputmode="decimal" /></label>
+              <label><span>Leverage cap</span><input id="leverage" value="10" inputmode="decimal" /></label>
+              <label>
+                <span>Margin</span>
+                <select id="margin-mode">
+                  <option value="isolated" selected>Isolated</option>
+                  <option value="cross">Cross</option>
+                </select>
+              </label>
+              <label><span>Taker fee</span><input id="taker" value="0.0005" inputmode="decimal" /></label>
+              <label><span>Maker fee</span><input id="maker" value="0.0002" inputmode="decimal" /></label>
+              <label>
+                <span>Entry liquidity</span>
+                <select id="entry-liq">
+                  <option value="taker" selected>Taker</option>
+                  <option value="maker">Maker</option>
+                </select>
+              </label>
+              <label>
+                <span>Exit liquidity</span>
+                <select id="exit-liq">
+                  <option value="taker" selected>Taker</option>
+                  <option value="maker">Maker</option>
+                </select>
+              </label>
+              <label><span>Funding (fraction)</span><input id="funding" value="0" inputmode="decimal" /></label>
+              <label><span>Maintenance margin</span><input id="mmr" value="0.005" inputmode="decimal" /></label>
+            </div>
+            <label><span>Targets, comma separated</span><input id="targets" value="110, 120" /></label>
+            <label class="check"
+              ><input id="fee-from-margin" type="checkbox" checked /><span
+                >Entry fee comes out of the backing wallet</span
+              ></label
+            >
+            <div class="actions">
+              <button type="submit" id="calc-perp">Calculate</button>
+              <button type="button" id="ex-long">Example: 1% long</button>
+              <button type="button" id="ex-liq">Example: liq before stop</button>
+            </div>
+            <p class="hint">
+              Fees and the maintenance rate are fractions. 0.0005 is 5 basis points. 0.005 is 0.5 percent.
+            </p>
+          </form>
+          <div class="panel out" id="perp-out" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section id="view-defi" hidden>
+        <nav class="subtabs" aria-label="DeFi tool">
+          <button type="button" id="sub-il" class="on">IL</button>
+          <button type="button" id="sub-size">Size</button>
+          <button type="button" id="sub-be">Breakeven</button>
+          <button type="button" id="sub-hedge">Hedge</button>
+        </nav>
+
+        <div class="layout" id="pane-il">
+          <form class="panel" id="form-il">
+            <h2>Impermanent loss</h2>
+            <label>
+              <span>Model</span>
+              <select id="il-model">
+                <option value="constant-product" selected>Constant product</option>
+                <option value="concentrated">Concentrated range</option>
+              </select>
+            </label>
+            <div class="grid">
+              <label><span>Entry price</span><input id="il-entry" value="100" inputmode="decimal" /></label>
+              <label><span>Price now</span><input id="il-price" value="400" inputmode="decimal" /></label>
+              <label><span>Deposit (quote)</span><input id="il-deposit" value="1000" inputmode="decimal" /></label>
+              <label id="il-lower-wrap" hidden
+                ><span>Lower</span><input id="il-lower" value="81" inputmode="decimal"
+              /></label>
+              <label id="il-upper-wrap" hidden
+                ><span>Upper</span><input id="il-upper" value="121" inputmode="decimal"
+              /></label>
+            </div>
+            <div class="actions">
+              <button type="submit">Calculate</button>
+              <button type="button" id="ex-4x">Example: 4x</button>
+              <button type="button" id="ex-range">Example: 81 to 121</button>
+            </div>
+          </form>
+          <div class="panel out" id="il-out" aria-live="polite"></div>
+        </div>
+
+        <div class="layout" id="pane-size" hidden>
+          <form class="panel" id="form-size">
+            <h2>Size the deposit</h2>
+            <label>
+              <span>Model</span>
+              <select id="size-model">
+                <option value="constant-product">Constant product</option>
+                <option value="concentrated">Concentrated range</option>
+              </select>
+            </label>
+            <div class="grid">
+              <label><span>Capital</span><input id="size-capital" value="10000" inputmode="decimal" /></label>
+              <label>
+                <span>Kind</span>
+                <select id="size-kind">
+                  <option value="il">IL gap vs hold</option>
+                  <option value="drawdown">Drawdown vs deposit</option>
+                </select>
+              </label>
+              <label>
+                <span>Max loss mode</span>
+                <select id="size-loss-mode">
+                  <option value="percent">Percent of capital</option>
+                  <option value="fixed">Fixed quote</option>
+                </select>
+              </label>
+              <label><span>Max loss (1 means 1%)</span><input id="size-loss" value="1" inputmode="decimal" /></label>
+              <label><span>Entry price</span><input id="size-entry" value="100" inputmode="decimal" /></label>
+              <label><span>Scenario price</span><input id="size-price" value="400" inputmode="decimal" /></label>
+            </div>
+            <div class="actions">
+              <button type="submit">Calculate</button>
+              <button type="button" id="ex-size">Example: 1% on a 4x</button>
+            </div>
+            <p class="hint">
+              The loss fraction is the quote gap per quote deposited, not the classic IL percent. On a 4x move those are
+              0.5 and 0.2.
+            </p>
+          </form>
+          <div class="panel out" id="size-out" aria-live="polite"></div>
+        </div>
+
+        <div class="layout" id="pane-be" hidden>
+          <form class="panel" id="form-be">
+            <h2>Fee APR vs the loss</h2>
+            <div class="grid">
+              <label><span>Loss percent</span><input id="be-loss" value="20" inputmode="decimal" /></label>
+              <label><span>Horizon days</span><input id="be-days" value="30" inputmode="decimal" /></label>
+              <label><span>Fee APR percent</span><input id="be-apr" value="50" inputmode="decimal" /></label>
+              <label><span>In range percent</span><input id="be-in" value="50" inputmode="decimal" /></label>
+            </div>
+            <div class="actions">
+              <button type="submit">Calculate</button>
+              <button type="button" id="ex-be">Example: 30 days</button>
+            </div>
+            <p class="hint">20 means 20 percent. This is a flat scenario, not a path of volume.</p>
+          </form>
+          <div class="panel out" id="be-out" aria-live="polite"></div>
+        </div>
+
+        <div class="layout" id="pane-hedge" hidden>
+          <form class="panel" id="form-hedge">
+            <h2>Perp hedge of the base</h2>
+            <label>
+              <span>Model</span>
+              <select id="hedge-model">
+                <option value="constant-product">Constant product</option>
+                <option value="concentrated">Concentrated range</option>
+              </select>
+            </label>
+            <div class="grid">
+              <label><span>Entry price</span><input id="hedge-entry" value="100" inputmode="decimal" /></label>
+              <label><span>Price now</span><input id="hedge-price" value="100" inputmode="decimal" /></label>
+              <label><span>Deposit</span><input id="hedge-deposit" value="1000" inputmode="decimal" /></label>
+              <label id="hedge-lower-wrap" hidden
+                ><span>Lower</span><input id="hedge-lower" value="81" inputmode="decimal"
+              /></label>
+              <label id="hedge-upper-wrap" hidden
+                ><span>Upper</span><input id="hedge-upper" value="121" inputmode="decimal"
+              /></label>
+            </div>
+            <div class="actions">
+              <button type="submit">Calculate</button>
+              <button type="button" id="ex-hedge">Example: half the value</button>
+            </div>
+            <p class="hint">
+              Short this many base units to flat the delta at this price. It does not cancel the curve.
+            </p>
+          </form>
+          <div class="panel out" id="hedge-out" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+    <div class="band sparse" aria-hidden="true"></div>
+    <footer>
+      <p>
+        Not financial advice. Past results do not predict future results. The page runs the same formulas as the
+        library. Nothing you type is sent anywhere.
+      </p>
+      <p>
+        Formulas: <a href="https://github.com/accomplish999/position-sizer/blob/main/docs/PERPS.md">perps</a>,
+        <a href="https://github.com/accomplish999/position-sizer/blob/main/docs/DEFI.md">DeFi</a>.
+        <a href="https://github.com/accomplish999/position-sizer">Source</a>. MIT.
+      </p>
+    </footer>
+    <noscript>This page needs JavaScript to run the calculators. The CLI does not.</noscript>
+    <script src="position-sizer.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

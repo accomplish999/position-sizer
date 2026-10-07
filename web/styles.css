@@ -200,6 +200,10 @@ header h1 {
   text-transform: uppercase;
 }
 
+.panel h2:not(:first-child) {
+  margin-top: 24px;
+}
+
 label {
   display: block;
   margin: 0 0 10px;

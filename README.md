@@ -6,6 +6,8 @@ Fees go into the denominator. If liquidation sits before the stop, the stop does
 
 The hosted calculator is <https://accomplish999.github.io/position-sizer/>.
 
+![Perps tab. Account 10000, risk 1 percent, long from 100, stop 95, leverage cap 10. Size 19.6175 base. Liquidation 90.55 sits below the stop.](docs/images/calc-perps.png)
+
 This is arithmetic. It is not a signal, and it is not advice. Past results do not predict future results.
 
 ## Contents
@@ -445,6 +447,10 @@ R to price
 
 The price-only column still says 2 R at 110. After fees it is 1.941148 R. The 2 R price, net of fees, is 110.30015, not 110. Fee-adjusted risk equals the budget of 100. The three fee lines are the rounded split of that sum. The full account cannot liquidate this long: notional prints as 1961.746 against a 10,000 account, so that price is reported as 0. Bankruptcy at 90.05 sits below liquidation at 90.548014, which is the right order for a long.
 
+The hosted page rounds that same long for the screen. The CLI block above keeps the longer print.
+
+![Perps tab for the worked long. Account 10000, risk 1 percent, entry 100, stop 95. The ladder shows liquidation at 90.55, under the stop.](docs/images/calc-perps.png)
+
 ### Chart of the fee long
 
 Entry 100. Stop 95. Liquidation 90.548014. The stop sits 4.451986 above liquidation, so the stop is the first of the two prices. Bankruptcy is 90.05, on the safer side of liquidation. The size is 19.61746 base, notional 1961.746, margin 196.174595.
@@ -629,6 +635,10 @@ in range                    yes
 ```
 
 857.142857 is 6000/7. The IL fraction -0.05759162 is the text view of -11/191. Hold value 909.52381 is the text view of 19100/21. Drawdown versus the deposit is positive here. At the upper price it was negative. The divergence versus the hold is 52.380952 in both printed cases. The boundary prices still report `in range` as `yes`.
+
+The hosted page marks that range at the upper price. IL versus holding prints as minus 4.76 percent.
+
+![DeFi tab, one range. Entry 100, lower 81, upper 121, price now 121, deposit 1000. The position is all quote and IL versus holding is minus 4.76 percent.](docs/images/calc-defi.png)
 
 ### Chart of the range
 
@@ -1021,6 +1031,8 @@ Hosted copy: <https://accomplish999.github.io/position-sizer/>.
 Locally, `npm run build:web` writes `web/position-sizer.js`. Open [web/index.html](web/index.html) after that. The page needs JavaScript. The CLI does not.
 
 Two tabs. Perps is selected on load and already calculated. The fields are the fee long: account 10,000, risk mode percent, risk 1, side long, entry 100, stop 95, leverage cap 10, isolated, taker 0.0005, maker 0.0002, funding 0, maintenance margin 0.005, targets `110, 120`, entry fee taken from the backing wallet. `Example: 1% long` restores that and recalculates. `Example: liq before stop` loads the 20x case (stop 90, cap 20, fees 0, target 110) and recalculates. A loud warning shows in the same view as the size.
+
+![Perps tab switching from the 1 percent long to liquidation before the stop. The stop, the leverage cap, and the size change, and a warning appears.](docs/images/calc-demo.gif)
 
 DeFi has four tools: IL, Size, Breakeven, Hedge.
 

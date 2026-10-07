@@ -378,11 +378,12 @@ footer {
 .foot-bar {
   max-width: 1040px;
   margin: 0 auto;
-  padding: 10px 20px 12px;
+  padding: 10px 20px calc(12px + env(safe-area-inset-bottom));
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }
 
 .foot-bar p {
@@ -406,7 +407,16 @@ footer {
 
   .layout,
   .grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel {
+    min-width: 0;
+  }
+
+  /* Result tables scroll inside their panel, never the page. */
+  .out {
+    overflow-x: auto;
   }
 
   .out .hero {
@@ -423,5 +433,27 @@ footer {
 
   .foot-bar p {
     white-space: normal;
+  }
+
+  /* A pinned footer eats a phone screen. Keep it in flow. */
+  body {
+    padding-bottom: 0;
+  }
+
+  footer {
+    position: static;
+  }
+}
+
+/* Touch screens: 40px targets, and 16px fields so iOS does not zoom. */
+@media (pointer: coarse), (max-width: 800px) {
+  input:not([type="checkbox"]),
+  select {
+    font-size: 16px;
+    min-height: 40px;
+  }
+
+  button {
+    min-height: 40px;
   }
 }

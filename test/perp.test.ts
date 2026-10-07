@@ -356,3 +356,81 @@ test("bad inputs name the problem", () => {
     (err: unknown) => err instanceof InputError && err.code === "ENTRY_FEE_EXCEEDS_MARGIN",
   );
 });
+
+test("funding per 8h times the hold is the cost, and longs pay when the rate is positive", () => {
+  const result = sizePerp(base({ fundingPer8h: 0.0001, holdHours: 24 }));
+  close(result.fundingRate, 0.0003);
+  close(result.qtyBase, 100 / 5.03);
+  close(result.fundingCost, result.qtyBase * 100 * 0.0003);
+  close(result.feeAdjustedRisk, 100);
+  close(result.breakevenPrice, 100.03);
+  assert.equal(result.fundingPer8h, 0.0001);
+  assert.equal(result.holdHours, 24);
+});
+
+test("a positive 8h rate pays a short", () => {
+  const result = sizePerp(base({ side: "short", stop: 110, fundingPer8h: 0.0001, holdHours: 8 }));
+  close(result.fundingRate, -0.0001);
+  assert.ok(result.fundingCost < 0);
+  assert.ok(result.qtyBase > 10);
+  close(result.feeAdjustedRisk, 100);
+});
+
+test("flat funding and the 8h schedule cannot both be set", () => {
+  assert.throws(
+    () => sizePerp(base({ fundingRate: 0.0001, fundingPer8h: 0.0001, holdHours: 8 })),
+    (err: unknown) => err instanceof InputError && err.code === "FUNDING_RATE",
+  );
+});
+
+test("partial closes report P&L per target and a blended R", () => {
+  const result = sizePerp(
+    base({
+      targets: [
+        { price: 110, closePercent: 50 },
+        { price: 120, closePercent: 50 },
+      ],
+    }),
+  );
+  close(result.qtyBase, 20);
+  const first = result.targets[0];
+  const second = result.targets[1];
+  assert.ok(first && second && result.blended);
+  close(first.netPnl, 100);
+  close(first.rMultiple, 2);
+  close(second.netPnl, 200);
+  close(second.rMultiple, 4);
+  close(result.blended.closePercent, 100);
+  close(result.blended.netPnl, 300);
+  close(result.blended.rMultiple, 3);
+  close(result.blended.rOnFullRisk, 3);
+  close(result.breakevenPrice, 100);
+});
+
+test("a partial that leaves size open blends only the closed slice", () => {
+  const result = sizePerp(base({ targets: [{ price: 110, closePercent: 25 }] }));
+  assert.ok(result.blended);
+  close(result.targets[0]?.netPnl ?? NaN, 50);
+  close(result.blended.rMultiple, 2);
+  close(result.blended.rOnFullRisk, 0.5);
+  assert.ok(result.warnings.some((warning) => warning.code === "TARGETS_LEAVE_A_REST"));
+});
+
+test("close percents above 100 are rejected", () => {
+  assert.throws(
+    () =>
+      sizePerp(
+        base({
+          targets: [
+            { price: 110, closePercent: 60 },
+            { price: 120, closePercent: 50 },
+          ],
+        }),
+      ),
+    (err: unknown) => err instanceof InputError && err.code === "TARGET_SHARE",
+  );
+  assert.throws(
+    () => sizePerp(base({ targets: [110, { price: 120, closePercent: 50 }] })),
+    (err: unknown) => err instanceof InputError && err.code === "TARGET_SHARE",
+  );
+});

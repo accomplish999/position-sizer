@@ -48,13 +48,15 @@ Text mode writes errors to stderr as `CODE: message`. JSON mode writes every obj
 --entry-liquidity taker|maker
 --exit-liquidity taker|maker
 --funding <fraction or %>
+--funding-8h <fraction or %>
+--hold-hours <hours>
 --margin isolated|cross
 --entry-fee-from-margin true|false
---target <price>
+--target <price or price:close%>
 --r <multiple>
 ```
 
-Pass one of `--risk`, `--risk-percent`, or `--risk-fixed`. `--target` and `--r` can be repeated.
+Pass one of `--risk`, `--risk-percent`, or `--risk-fixed`. `--target` and `--r` can be repeated. `--funding` is the signed fraction you pay over the whole hold. `--funding-8h` is the market rate for one 8 hour period, positive when longs pay shorts, and it needs `--hold-hours`. Pass one funding form, not both. `--target 110` is a full exit. `--target 110:50%` closes half the size at 110.
 
 A bare fee or maintenance rate is a fraction. A trailing `%` divides by 100, so `--mmr 0.5%` and `--mmr 0.005` match. `--risk 1%` is percent mode. `--risk 1` is a fixed 1 quote, which is almost never what you want.
 

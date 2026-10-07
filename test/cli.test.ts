@@ -10,7 +10,7 @@ test("help and version", () => {
   assert.equal(help.stderr, "");
   const version = main(["--version"]);
   assert.equal(version.code, 0);
-  assert.match(version.stdout, /0\.1\.0/);
+  assert.match(version.stdout, /0\.2\.0/);
 });
 
 test("perp JSON includes the loud warning and strict exits 3", () => {
@@ -81,6 +81,56 @@ test("perp text shows base and quote size", () => {
   assert.match(result.stdout, /position size \(base\)\s+20/);
   assert.match(result.stdout, /position size \(quote\)\s+2000/);
   assert.match(result.stdout, /110\s+2 R/);
+  assert.match(result.stdout, /breakeven\s+100/);
+});
+
+test("partial targets and an 8h funding schedule print from flags", () => {
+  const result = main([
+    "perp",
+    "--account",
+    "10000",
+    "--risk-fixed",
+    "100",
+    "--entry",
+    "100",
+    "--stop",
+    "95",
+    "--side",
+    "long",
+    "--leverage",
+    "10",
+    "--taker",
+    "0",
+    "--maker",
+    "0",
+    "--mmr",
+    "0.005",
+    "--funding-8h",
+    "0.01%",
+    "--hold-hours",
+    "24",
+    "--target",
+    "110:40%",
+    "--target",
+    "120:60%",
+    "--json",
+  ]);
+  assert.equal(result.code, 0);
+  const body = JSON.parse(result.stdout) as {
+    ok: boolean;
+    result: {
+      fundingRate: number;
+      breakevenPrice: number;
+      blended: { closePercent: number; netPnl: number };
+      targets: Array<{ closePercent: number; price: number }>;
+    };
+  };
+  assert.equal(body.ok, true);
+  assert.ok(Math.abs(body.result.fundingRate - 0.0003) < 1e-12);
+  assert.equal(body.result.targets[0]?.closePercent, 40);
+  assert.equal(body.result.targets[1]?.price, 120);
+  assert.equal(body.result.blended.closePercent, 100);
+  assert.ok(body.result.breakevenPrice > 100);
 });
 
 test("bad stop is a JSON error with exit 1", () => {

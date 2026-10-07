@@ -17,7 +17,7 @@ import {
 } from "./defi";
 import { formatBounds, formatBreakeven, formatHedge, formatIl, formatPerp, formatSize } from "./format";
 import { parseFraction } from "./numbers";
-import { sizePerp, type Liquidity, type MarginMode, type PerpInput, type Side } from "./perp";
+import { sizePerp, type Liquidity, type MarginMode, type PerpInput, type Side, type TargetSpec } from "./perp";
 import { VERSION } from "./version";
 
 interface Flags {
@@ -165,6 +165,39 @@ function boolField(obj: Record<string, unknown>, key: string, fallback: boolean)
   return value;
 }
 
+function targetList(value: unknown, key: string): TargetSpec[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new InputError("INVALID_INPUT", `${key} must be an array.`);
+  }
+  return value.map((item, index) => {
+    if (typeof item === "number") {
+      if (!Number.isFinite(item)) {
+        throw new InputError("NOT_FINITE", `${key}[${index}] must be a finite number.`);
+      }
+      return item;
+    }
+    const obj = asRecord(item, `${key}[${index}]`);
+    const spec: { price: number; closePercent?: number } = { price: numField(obj, "price") };
+    if (obj.closePercent !== undefined) spec.closePercent = numField(obj, "closePercent");
+    return spec;
+  });
+}
+
+function parseTargetFlag(raw: string): TargetSpec {
+  const text = raw.trim();
+  const colon = text.indexOf(":");
+  if (colon === -1) return Number(text);
+  const price = Number(text.slice(0, colon).trim());
+  let share = text.slice(colon + 1).trim();
+  if (share.endsWith("%")) share = share.slice(0, -1).trim();
+  const closePercent = Number(share);
+  if (!Number.isFinite(price) || !Number.isFinite(closePercent)) {
+    throw new InputError("NOT_FINITE", "A target is a price, or price:close%. Example: 110:50%.");
+  }
+  return { price, closePercent };
+}
+
 function numberList(value: unknown, key: string): number[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
@@ -238,7 +271,7 @@ function perpFromJson(value: unknown): PerpInput {
   if (mode !== "percent" && mode !== "fixed") {
     throw new InputError("RISK_MODE", 'Risk mode must be "percent" or "fixed".');
   }
-  const targets = numberList(obj.targets, "targets");
+  const targets = targetList(obj.targets, "targets");
   const rMultiples = numberList(obj.rMultiples, "rMultiples");
   const input: PerpInput = {
     accountSize: numField(obj, "accountSize"),
@@ -256,6 +289,8 @@ function perpFromJson(value: unknown): PerpInput {
   if (obj.exitLiquidity !== undefined)
     input.exitLiquidity = liquidityOf(strField(obj, "exitLiquidity"), "exitLiquidity");
   if (obj.fundingRate !== undefined) input.fundingRate = numField(obj, "fundingRate");
+  if (obj.fundingPer8h !== undefined) input.fundingPer8h = numField(obj, "fundingPer8h");
+  if (obj.holdHours !== undefined) input.holdHours = numField(obj, "holdHours");
   if (obj.marginMode !== undefined) input.marginMode = marginModeOf(strField(obj, "marginMode"));
   if (obj.entryFeeFromMargin !== undefined) input.entryFeeFromMargin = boolField(obj, "entryFeeFromMargin", true);
   if (targets !== undefined) input.targets = targets;
@@ -278,7 +313,7 @@ function perpFromFlags(flags: Flags): PerpInput {
   if (risk.mode === "percent" && !Number.isFinite(risk.value)) {
     throw new InputError("NOT_FINITE", "Risk percent must be a finite number.");
   }
-  const targets = flagList(flags, "target").map((item) => Number(item));
+  const targets = flagList(flags, "target").map((item) => parseTargetFlag(item));
   const rMultiples = flagList(flags, "r").map((item) => Number(item));
   const input: PerpInput = {
     accountSize: Number(requireFlag(flags, "account")),
@@ -297,6 +332,10 @@ function perpFromFlags(flags: Flags): PerpInput {
   if (exitLiquidity) input.exitLiquidity = exitLiquidity;
   const funding = flag(flags, "funding");
   if (funding !== undefined) input.fundingRate = parseFraction("funding", funding);
+  const funding8h = flag(flags, "funding-8h");
+  if (funding8h !== undefined) input.fundingPer8h = parseFraction("funding-8h", funding8h);
+  const holdHours = flag(flags, "hold-hours");
+  if (holdHours !== undefined) input.holdHours = Number(holdHours);
   const marginMode = marginModeOf(flag(flags, "margin"));
   if (marginMode) input.marginMode = marginMode;
   const feeFrom = flag(flags, "entry-fee-from-margin");
@@ -479,10 +518,12 @@ Perp flags
   --mmr <fraction or %>
   --entry-liquidity taker|maker   default taker
   --exit-liquidity taker|maker    default taker
-  --funding <fraction>            positive means you pay
+  --funding <fraction>            you pay this fraction of notional over the hold
+  --funding-8h <fraction>         market rate per 8h; positive means longs pay shorts
+  --hold-hours <hours>            pair with --funding-8h
   --margin isolated|cross         default isolated
   --entry-fee-from-margin true|false
-  --target <price>                repeatable
+  --target <price or price:close%>  repeatable
   --r <multiple>                  repeatable
 
 Defi flags

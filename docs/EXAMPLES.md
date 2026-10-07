@@ -34,6 +34,7 @@ price risk                  98.087298
 entry fee                   0.98087298
 exit fee at stop            0.93182933
 funding                     0
+breakeven                   100.10005
 
 targets
   110   1.941148 R   net 194.114762   price-only 2 R
@@ -78,6 +79,7 @@ price risk                  100
 entry fee                   0
 exit fee at stop            0
 funding                     0
+breakeven                   100
 
 targets
   90   1 R   net 100   price-only 1 R
@@ -121,6 +123,7 @@ price risk                  100
 entry fee                   0
 exit fee at stop            0
 funding                     0
+breakeven                   100
 
 targets
   110   1 R   net 100   price-only 1 R

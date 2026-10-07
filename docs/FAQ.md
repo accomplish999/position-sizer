@@ -34,7 +34,7 @@ It often is. A 20 percent gap over 30 days, in range half the time, needs a fee 
 
 ## Can I lose more than the fee-adjusted risk?
 
-Yes. The fee-adjusted risk assumes the stop fills at the stop, that funding matches the single rate you typed, and that you are not liquidated first. Miss any one of those and the loss is a different number. Slippage past the stop is not in the model.
+Yes. The fee-adjusted risk assumes the stop fills at the stop, that funding matches the rate you typed, and that you are not liquidated first. An 8 hour rate times the hold is still one flat number. It is not the path of later settlements. Miss any one of those and the loss is a different number. Slippage past the stop is not in the model.
 
 ## Is this financial advice?
 

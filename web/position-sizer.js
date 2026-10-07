@@ -147,6 +147,77 @@ var PositionSizer = (() => {
       distanceFromStop: distanceFromStop(side, price, stop)
     };
   }
+  function resolveFunding(input, side) {
+    const hasFlat = input.fundingRate !== void 0;
+    const hasSchedule = input.fundingPer8h !== void 0 || input.holdHours !== void 0;
+    if (hasFlat && hasSchedule) {
+      throw new InputError("FUNDING_RATE", "Pass fundingRate, or fundingPer8h with holdHours. Not both.");
+    }
+    if (hasSchedule) {
+      if (input.fundingPer8h === void 0 || input.holdHours === void 0) {
+        throw new InputError("FUNDING_RATE", "Funding per 8h and hold hours are a pair.");
+      }
+      const fundingPer8h = reqFinite("fundingPer8h", input.fundingPer8h);
+      const holdHours = reqFinite("holdHours", input.holdHours);
+      if (!(holdHours > 0)) {
+        throw new InputError("FUNDING_RATE", "Hold hours must be above 0.");
+      }
+      if (fundingPer8h <= -1 || fundingPer8h >= 1) {
+        throw new InputError(
+          "FUNDING_RATE",
+          "Funding per 8h must sit strictly between -1 and 1. It is a fraction of notional."
+        );
+      }
+      const periods = holdHours / 8;
+      const market = fundingPer8h * periods;
+      const fundingRate2 = side === "long" ? market : -market;
+      if (fundingRate2 <= -1 || fundingRate2 >= 1) {
+        throw new InputError(
+          "FUNDING_RATE",
+          "Funding over the hold must sit strictly between -1 and 1. Shorten the hold or the 8h rate."
+        );
+      }
+      return { fundingRate: fundingRate2, fundingPer8h, holdHours };
+    }
+    const fundingRate = input.fundingRate === void 0 ? 0 : reqFinite("fundingRate", input.fundingRate);
+    if (fundingRate <= -1 || fundingRate >= 1) {
+      throw new InputError(
+        "FUNDING_RATE",
+        "Funding rate must sit strictly between -1 and 1. It is a fraction of entry notional."
+      );
+    }
+    return { fundingRate, fundingPer8h: null, holdHours: null };
+  }
+  function normalizeTargets(raw) {
+    if (raw === void 0 || raw.length === 0) return [];
+    const parsed = raw.map((item) => {
+      if (typeof item === "number") {
+        return { price: reqPositive("target", item), closePercent: null };
+      }
+      if (item === null || typeof item !== "object") {
+        throw new InputError("TARGET", "A target is a price, or a price and a close percent.");
+      }
+      const price = reqPositive("target", item.price);
+      if (item.closePercent === void 0) return { price, closePercent: null };
+      const closePercent = reqFinite("closePercent", item.closePercent);
+      if (!(closePercent > 0) || closePercent > 100) {
+        throw new InputError("TARGET_SHARE", "A close percent has to be above 0 and at most 100.");
+      }
+      return { price, closePercent };
+    });
+    const partial = parsed.some((target) => target.closePercent !== null);
+    const scenario = parsed.some((target) => target.closePercent === null);
+    if (partial && scenario) {
+      throw new InputError("TARGET_SHARE", "Give every target a close percent, or give none. Do not mix the two.");
+    }
+    if (partial) {
+      const sum = parsed.reduce((total, target) => total + (target.closePercent ?? 0), 0);
+      if (sum > 100 + 1e-9) {
+        throw new InputError("TARGET_SHARE", "Close percents add up to more than 100.");
+      }
+    }
+    return parsed;
+  }
   function netAt(input) {
     const { side, qty, entry, price, entryFeeRate, exitFeeRate, fundingRate } = input;
     const pricePnl = side === "long" ? qty * (price - entry) : qty * (entry - price);
@@ -203,13 +274,8 @@ var PositionSizer = (() => {
     const entryFeeRate = pickFee(entryLiquidity, takerFee, makerFee);
     const exitFeeRate = pickFee(exitLiquidity, takerFee, makerFee);
     const closeFeeRate = takerFee;
-    const fundingRate = input.fundingRate === void 0 ? 0 : reqFinite("fundingRate", input.fundingRate);
-    if (fundingRate <= -1 || fundingRate >= 1) {
-      throw new InputError(
-        "FUNDING_RATE",
-        "Funding rate must sit strictly between -1 and 1. It is a fraction of entry notional."
-      );
-    }
+    const funding = resolveFunding(input, side);
+    const fundingRate = funding.fundingRate;
     const maintenanceMarginRate = reqFinite("maintenanceMarginRate", input.maintenanceMarginRate);
     if (maintenanceMarginRate < 0 || maintenanceMarginRate >= 1) {
       throw new InputError("MARGIN_RATE", "Maintenance margin rate must be at least 0 and below 1.");
@@ -280,12 +346,44 @@ var PositionSizer = (() => {
     const liquidation = marginMode === "isolated" ? liquidationAtCap : liquidationIfAccountBacksIt;
     const bankruptWallet = marginMode === "isolated" ? isolatedWallet : crossWallet;
     const bankrupt = bankruptcyPrice({ entry, qty, wallet: bankruptWallet, side });
-    const targets = (input.targets ?? []).map((price) => {
-      const px = reqPositive("target", price);
-      const netPnl = netAt({ side, qty, entry, price: px, entryFeeRate, exitFeeRate, fundingRate });
-      const rMultiple = feeAdjustedRisk === 0 ? 0 : netPnl / feeAdjustedRisk;
-      const priceOnlyR = side === "long" ? (px - entry) / priceGap : (entry - px) / priceGap;
-      return { price: px, netPnl, rMultiple, priceOnlyR };
+    const specs = normalizeTargets(input.targets);
+    const partial = specs.some((target) => target.closePercent !== null);
+    const targets = specs.map((spec) => {
+      const fraction = spec.closePercent === null ? 1 : spec.closePercent / 100;
+      const netPnl = netAt({
+        side,
+        qty: qty * fraction,
+        entry,
+        price: spec.price,
+        entryFeeRate,
+        exitFeeRate,
+        fundingRate
+      });
+      const sliceRisk = feeAdjustedRisk * fraction;
+      const rMultiple = sliceRisk === 0 ? 0 : netPnl / sliceRisk;
+      const priceOnlyR = side === "long" ? (spec.price - entry) / priceGap : (entry - spec.price) / priceGap;
+      return { price: spec.price, closePercent: spec.closePercent, netPnl, rMultiple, priceOnlyR };
+    });
+    let blended = null;
+    if (partial) {
+      const closePercent = targets.reduce((total, target) => total + (target.closePercent ?? 0), 0);
+      const netPnl = targets.reduce((total, target) => total + target.netPnl, 0);
+      const closedRisk = feeAdjustedRisk * (closePercent / 100);
+      blended = {
+        closePercent,
+        netPnl,
+        rMultiple: closedRisk === 0 ? 0 : netPnl / closedRisk,
+        rOnFullRisk: feeAdjustedRisk === 0 ? 0 : netPnl / feeAdjustedRisk
+      };
+    }
+    const breakevenPrice = priceForNet({
+      side,
+      qty,
+      entry,
+      entryFeeRate,
+      exitFeeRate,
+      fundingRate,
+      net: 0
     });
     const rList = input.rMultiples === void 0 ? [1, 2, 3] : input.rMultiples;
     const rLevels = [];
@@ -330,6 +428,13 @@ var PositionSizer = (() => {
         message: "The risk budget is larger than the account."
       });
     }
+    if (blended !== null && blended.closePercent < 100 - 1e-9) {
+      warnings.push({
+        code: "TARGETS_LEAVE_A_REST",
+        severity: "note",
+        message: "The targets close part of the size. The rest stays open and is not in the blended result."
+      });
+    }
     return {
       side,
       marginMode,
@@ -352,6 +457,9 @@ var PositionSizer = (() => {
       entryFee,
       exitFeeAtStop,
       fundingCost,
+      fundingPer8h: funding.fundingPer8h,
+      holdHours: funding.holdHours,
+      breakevenPrice,
       entryFeeRate,
       exitFeeRate,
       fundingRate,
@@ -359,6 +467,7 @@ var PositionSizer = (() => {
       closeFeeRate,
       entryFeeFromMargin,
       targets,
+      blended,
       rLevels,
       warnings
     };

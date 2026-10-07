@@ -49,7 +49,7 @@ Perp:
 - `result.liquidation.beforeStop`, `result.liquidation.price`, `result.liquidation.distanceFromStop`
 - `result.liquidationAtCap` and `result.liquidationIfAccountBacksIt` if you need both margin modes
 - `result.bindingConstraint`
-- `result.targets[].rMultiple` and `result.rLevels`
+- `result.targets[].rMultiple`, `result.blended`, `result.breakevenPrice`, and `result.rLevels`
 - `warnings`
 
 If `liquidation.beforeStop` is true, say that in the same breath as the size. Do not drop the warning because the exit code was 0.

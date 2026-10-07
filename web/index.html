@@ -25,10 +25,13 @@
     </header>
     <div class="band" aria-hidden="true"></div>
     <div class="wrap">
-      <nav class="tabs" aria-label="Calculator">
-        <button type="button" id="tab-perp" class="on" aria-selected="true">Perps</button>
-        <button type="button" id="tab-defi" aria-selected="false">DeFi</button>
-      </nav>
+      <div class="tabbar">
+        <nav class="tabs" aria-label="Calculator">
+          <button type="button" id="tab-perp" class="on" aria-selected="true">Perps</button>
+          <button type="button" id="tab-defi" aria-selected="false">DeFi</button>
+        </nav>
+        <button type="button" id="copy-link">Copy link</button>
+      </div>
 
       <section id="view-perp">
         <div class="layout">
@@ -77,10 +80,11 @@
                   <option value="maker">Maker</option>
                 </select>
               </label>
-              <label><span>Funding (fraction)</span><input id="funding" value="0" inputmode="decimal" /></label>
+              <label><span>Funding per 8h</span><input id="funding-8h" value="0" inputmode="decimal" /></label>
+              <label><span>Hold hours</span><input id="hold-hours" value="8" inputmode="decimal" /></label>
               <label><span>Maintenance margin</span><input id="mmr" value="0.005" inputmode="decimal" /></label>
             </div>
-            <label><span>Targets, comma separated</span><input id="targets" value="110, 120" /></label>
+            <label><span>Targets</span><input id="targets" value="110, 120" /></label>
             <label class="check"
               ><input id="fee-from-margin" type="checkbox" checked /><span
                 >Entry fee comes out of the backing wallet</span
@@ -92,7 +96,9 @@
               <button type="button" id="ex-liq">Example: liq before stop</button>
             </div>
             <p class="hint">
-              Fees and the maintenance rate are fractions. 0.0005 is 5 basis points. 0.005 is 0.5 percent.
+              Fees, funding per 8h, and the maintenance rate are fractions. 0.0005 is 5 basis points. A positive 8h rate
+              means longs pay shorts. Hold hours spreads that rate over the hold. Targets are
+              <span class="mono">110:50, 120:50</span> for a price and a close percent. A bare price is a full exit.
             </p>
           </form>
           <div class="panel out" id="perp-out" aria-live="polite"></div>

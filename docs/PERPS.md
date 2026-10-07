@@ -154,6 +154,8 @@ fee-adjusted risk = price risk + entry fee + exit fee at stop + funding
 
 A funding credit reduces the fee-adjusted risk. A funding payment increases it.
 
+Pass `fundingRate` as that signed fraction, positive when you pay. Or pass `fundingPer8h` and `holdHours`. The total fraction is `fundingPer8h * holdHours / 8`. A positive 8 hour rate means longs pay and shorts receive. Do not pass both. Breakeven is the full-close price where net is zero after fees and funding.
+
 ## R
 
 For a target price T, net pnl is the price pnl minus the entry fee, the exit fee at T, and funding.
@@ -172,6 +174,8 @@ short: (entry - target) / (stop - entry)
 ```
 
 The calculator also solves the net-pnl equation for price at R = -1, 1, 2, and 3, unless you pass your own list. R = -1 comes back as the stop.
+
+A target may be a price, or a price and a close percent. `closePercent: 50` closes half the original size. That row's R uses the fee-adjusted loss of the half, so it matches a full exit at the same price. When every target has a close percent, `blended` sums the nets. Blended R divides by the loss of the closed size. `rOnFullRisk` divides by the loss of the whole position. Percents must be above 0, at most 100, and must not add past 100. A list of bare prices stays a set of full-size scenarios and does not blend. Mixing the two is an error. A partial list that adds to less than 100 raises `TARGETS_LEAVE_A_REST`.
 
 ## Worked long
 
@@ -246,6 +250,7 @@ The stop order is still a real order. It does not cap the loss if the venue clos
 | `FULL_ACCOUNT_STILL_LIQUIDATES_FIRST` | loud     | Isolated mode, and the full-account price is also on the wrong side. |
 | `LEVERAGE_CAP_BINDS`                  | note     | Size was cut. Fee-adjusted risk is below the budget.                 |
 | `RISK_BUDGET_ABOVE_ACCOUNT`           | note     | The fixed risk budget is larger than the account.                    |
+| `TARGETS_LEAVE_A_REST`                | note     | Partial closes add up to less than 100 percent.                      |
 
 `--strict` turns a loud warning into exit code 3. It does not hide the result.
 
@@ -256,7 +261,7 @@ The stop order is still a real order. It does not cap the loss if the venue clos
 - Margin brackets that change with notional. One maintenance rate is the whole schedule here.
 - The insurance fund, auto-deleveraging, and a partial liquidation.
 - Slippage. The stop is assumed to fill at the stop price. Live stops often do not.
-- A funding path. You type one rate for the whole hold.
+- A path of changing funding rates. One 8 hour rate times the number of periods is a flat hold, not the settlements that actually print.
 - Extra margin added after entry. Isolated liquidation assumes the venue leverage is the cap and you do not add margin. Adding margin pushes liquidation away. The full-account figure is the other extreme, not a forecast of what you will actually post.
 - Fees charged in a third asset, rebates, and VIP tiers. A negative fee is rejected. If you are paid to make, set that fee to 0 and accept a slightly smaller size.
 

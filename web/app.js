@@ -77,6 +77,15 @@
     return formatSig(value, Math.abs(value) >= 1 ? 6 : 4);
   }
 
+  function formatRate(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+    const digits = Math.abs(value) > 0 && Math.abs(value) < 0.001 ? 8 : 6;
+    return value
+      .toFixed(digits)
+      .replace(/(\.\d*?)0+$/, "$1")
+      .replace(/\.$/, "");
+  }
+
   function formatFrac(value) {
     if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
     return value
@@ -134,7 +143,10 @@
     document.getElementById("tab-defi").setAttribute("aria-selected", perp ? "false" : "true");
   }
 
+  let defiTool = "il";
+
   function setSub(name) {
+    defiTool = name;
     ["il", "size", "be", "hedge"].forEach(function (id) {
       const pane = document.getElementById("pane-" + id);
       const button = document.getElementById("sub-" + id);
@@ -152,14 +164,23 @@
     });
   }
 
-  function perpInput() {
-    const targets = read("targets")
+  function parseTargets(text) {
+    return text
       .split(",")
       .map(function (part) {
         return part.trim();
       })
       .filter(Boolean)
-      .map(Number);
+      .map(function (part) {
+        const colon = part.indexOf(":");
+        if (colon === -1) return Number(part);
+        let share = part.slice(colon + 1).trim();
+        if (share.endsWith("%")) share = share.slice(0, -1).trim();
+        return { price: Number(part.slice(0, colon).trim()), closePercent: Number(share) };
+      });
+  }
+
+  function perpInput() {
     return {
       accountSize: numOf("account"),
       risk: { mode: read("risk-mode"), value: numOf("risk") },
@@ -171,11 +192,12 @@
       makerFee: numOf("maker"),
       entryLiquidity: read("entry-liq"),
       exitLiquidity: read("exit-liq"),
-      fundingRate: numOf("funding"),
+      fundingPer8h: numOf("funding-8h"),
+      holdHours: numOf("hold-hours"),
       maintenanceMarginRate: numOf("mmr"),
       marginMode: read("margin-mode"),
       entryFeeFromMargin: document.getElementById("fee-from-margin").checked,
-      targets: targets,
+      targets: parseTargets(read("targets")),
     };
   }
 
@@ -320,6 +342,9 @@
           ["Entry fee", formatMoney(result.entryFee)],
           ["Exit fee at stop", formatMoney(result.exitFeeAtStop)],
           ["Funding", formatMoney(result.fundingCost)],
+          ["Funding per 8h", formatRate(result.fundingPer8h === null ? 0 : result.fundingPer8h)],
+          ["Hold hours", formatFixed(result.holdHours === null ? 0 : result.holdHours, 2)],
+          ["Breakeven", formatPrice(result.breakevenPrice)],
           ["Liquidation", liqText],
           ["Distance vs stop", formatPrice(result.liquidation.distanceFromStop)],
           ["Stop hits first", result.liquidation.beforeStop ? "no" : "yes"],
@@ -340,16 +365,35 @@
       if (result.targets.length) {
         html += "<h2>Targets</h2><dl>";
         result.targets.forEach(function (target) {
-          html += rows([[formatPrice(target.price), formatFixed(target.rMultiple, 2) + " R"]]);
+          const name =
+            target.closePercent === null
+              ? formatPrice(target.price)
+              : formatPrice(target.price) + " close " + formatFixed(target.closePercent, 2) + "%";
+          html += rows([
+            [name, formatFixed(target.rMultiple, 2) + " R"],
+            ["Net", formatMoney(target.netPnl)],
+          ]);
         });
+        if (result.blended) {
+          html += rows([
+            [
+              "Blended " + formatFixed(result.blended.closePercent, 2) + "%",
+              formatFixed(result.blended.rMultiple, 2) + " R",
+            ],
+            ["Blended net", formatMoney(result.blended.netPnl)],
+            ["On full risk", formatFixed(result.blended.rOnFullRisk, 2) + " R"],
+          ]);
+        }
         html += "</dl>";
       }
       html += jsonBlock({ warnings: result.warnings, result: result });
       slot.innerHTML = html;
       bindRuler();
+      writeHash();
       if (scroll) slot.scrollIntoView({ block: "nearest" });
     } catch (err) {
       showError(slot, err);
+      writeHash();
     }
   }
 
@@ -389,8 +433,10 @@
         "</dl>" +
         jsonBlock(result);
       slot.innerHTML = html;
+      writeHash();
     } catch (err) {
       showError(slot, err);
+      writeHash();
     }
   }
 
@@ -426,8 +472,10 @@
         "</dl>" +
         jsonBlock(result);
       slot.innerHTML = html;
+      writeHash();
     } catch (err) {
       showError(slot, err);
+      writeHash();
     }
   }
 
@@ -453,8 +501,10 @@
         "</dl>" +
         jsonBlock(result);
       slot.innerHTML = html;
+      writeHash();
     } catch (err) {
       showError(slot, err);
+      writeHash();
     }
   }
 
@@ -487,28 +537,226 @@
         '</dl><p class="hint">A short of that base size offsets delta at this price. It does not cancel the curved loss.</p>' +
         jsonBlock(result);
       slot.innerHTML = html;
+      writeHash();
     } catch (err) {
       showError(slot, err);
+      writeHash();
+    }
+  }
+
+  function setField(id, value) {
+    if (value === null || value === undefined || value === "") return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === "checkbox") el.checked = value === "1" || value === "true";
+    else el.value = value;
+  }
+
+  function perpParams() {
+    const params = new URLSearchParams();
+    [
+      ["account", "account"],
+      ["riskMode", "risk-mode"],
+      ["risk", "risk"],
+      ["side", "side"],
+      ["entry", "entry"],
+      ["stop", "stop"],
+      ["leverage", "leverage"],
+      ["margin", "margin-mode"],
+      ["taker", "taker"],
+      ["maker", "maker"],
+      ["entryLiq", "entry-liq"],
+      ["exitLiq", "exit-liq"],
+      ["funding8h", "funding-8h"],
+      ["holdHours", "hold-hours"],
+      ["mmr", "mmr"],
+      ["targets", "targets"],
+    ].forEach(function (pair) {
+      params.set(pair[0], read(pair[1]));
+    });
+    params.set("feeFromMargin", document.getElementById("fee-from-margin").checked ? "1" : "0");
+    return params;
+  }
+
+  function defiParams() {
+    const params = new URLSearchParams();
+    params.set("tool", defiTool);
+    const fields = {
+      il: [
+        ["model", "il-model"],
+        ["entry", "il-entry"],
+        ["price", "il-price"],
+        ["deposit", "il-deposit"],
+        ["lower", "il-lower"],
+        ["upper", "il-upper"],
+      ],
+      size: [
+        ["model", "size-model"],
+        ["capital", "size-capital"],
+        ["kind", "size-kind"],
+        ["lossMode", "size-loss-mode"],
+        ["loss", "size-loss"],
+        ["entry", "size-entry"],
+        ["price", "size-price"],
+      ],
+      be: [
+        ["loss", "be-loss"],
+        ["days", "be-days"],
+        ["apr", "be-apr"],
+        ["inRange", "be-in"],
+      ],
+      hedge: [
+        ["model", "hedge-model"],
+        ["entry", "hedge-entry"],
+        ["price", "hedge-price"],
+        ["deposit", "hedge-deposit"],
+        ["lower", "hedge-lower"],
+        ["upper", "hedge-upper"],
+      ],
+    };
+    (fields[defiTool] || []).forEach(function (pair) {
+      params.set(pair[0], read(pair[1]));
+    });
+    return params;
+  }
+
+  function writeHash() {
+    const perpOn = !document.getElementById("view-perp").hidden;
+    const next = "#" + (perpOn ? "perp" : "defi") + "?" + (perpOn ? perpParams() : defiParams()).toString();
+    if (location.hash !== next) history.replaceState(null, "", next);
+  }
+
+  function renderDefiTool() {
+    if (defiTool === "il") renderIl();
+    else if (defiTool === "size") renderSize();
+    else if (defiTool === "be") renderBe();
+    else renderHedge();
+  }
+
+  function applyHash() {
+    const raw = location.hash.replace(/^#/, "");
+    if (!raw) return false;
+    const q = raw.indexOf("?");
+    const head = (q === -1 ? raw : raw.slice(0, q)).toLowerCase();
+    const params = new URLSearchParams(q === -1 ? "" : raw.slice(q + 1));
+    if (head === "perp") {
+      setField("account", params.get("account"));
+      setField("risk-mode", params.get("riskMode"));
+      setField("risk", params.get("risk"));
+      setField("side", params.get("side"));
+      setField("entry", params.get("entry"));
+      setField("stop", params.get("stop"));
+      setField("leverage", params.get("leverage"));
+      setField("margin-mode", params.get("margin"));
+      setField("taker", params.get("taker"));
+      setField("maker", params.get("maker"));
+      setField("entry-liq", params.get("entryLiq"));
+      setField("exit-liq", params.get("exitLiq"));
+      setField("funding-8h", params.get("funding8h"));
+      setField("hold-hours", params.get("holdHours"));
+      setField("mmr", params.get("mmr"));
+      setField("targets", params.get("targets"));
+      setField("fee-from-margin", params.get("feeFromMargin"));
+      setTab("perp");
+      renderPerp(false);
+      return true;
+    }
+    if (head !== "defi") return false;
+    const tool = params.get("tool") || "il";
+    if (tool === "size") {
+      setField("size-model", params.get("model"));
+      setField("size-capital", params.get("capital"));
+      setField("size-kind", params.get("kind"));
+      setField("size-loss-mode", params.get("lossMode"));
+      setField("size-loss", params.get("loss"));
+      setField("size-entry", params.get("entry"));
+      setField("size-price", params.get("price"));
+    } else if (tool === "be") {
+      setField("be-loss", params.get("loss"));
+      setField("be-days", params.get("days"));
+      setField("be-apr", params.get("apr"));
+      setField("be-in", params.get("inRange"));
+    } else if (tool === "hedge") {
+      setField("hedge-model", params.get("model"));
+      setField("hedge-entry", params.get("entry"));
+      setField("hedge-price", params.get("price"));
+      setField("hedge-deposit", params.get("deposit"));
+      setField("hedge-lower", params.get("lower"));
+      setField("hedge-upper", params.get("upper"));
+      rangeVisibility("hedge-model", ["hedge-lower-wrap", "hedge-upper-wrap"]);
+    } else {
+      setField("il-model", params.get("model"));
+      setField("il-entry", params.get("entry"));
+      setField("il-price", params.get("price"));
+      setField("il-deposit", params.get("deposit"));
+      setField("il-lower", params.get("lower"));
+      setField("il-upper", params.get("upper"));
+      rangeVisibility("il-model", ["il-lower-wrap", "il-upper-wrap"]);
+    }
+    setTab("defi");
+    setSub(tool === "size" || tool === "be" || tool === "hedge" ? tool : "il");
+    renderDefiTool();
+    return true;
+  }
+
+  function copyLink() {
+    writeHash();
+    const button = document.getElementById("copy-link");
+    const url = location.href;
+    const done = function () {
+      button.textContent = "Copied";
+      window.setTimeout(function () {
+        button.textContent = "Copy link";
+      }, 1200);
+    };
+    const fallback = function () {
+      const input = document.createElement("textarea");
+      input.value = url;
+      input.setAttribute("readonly", "");
+      document.body.appendChild(input);
+      input.select();
+      try {
+        document.execCommand("copy");
+      } catch (err) {
+        /* The address bar already holds the link. */
+      }
+      input.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () {
+        fallback();
+        done();
+      });
+    } else {
+      fallback();
+      done();
     }
   }
 
   document.getElementById("tab-perp").addEventListener("click", function () {
     setTab("perp");
+    renderPerp(false);
   });
   document.getElementById("tab-defi").addEventListener("click", function () {
     setTab("defi");
+    renderDefiTool();
   });
+  document.getElementById("copy-link").addEventListener("click", copyLink);
   document.getElementById("sub-il").addEventListener("click", function () {
     setSub("il");
+    renderIl();
   });
   document.getElementById("sub-size").addEventListener("click", function () {
     setSub("size");
+    renderSize();
   });
   document.getElementById("sub-be").addEventListener("click", function () {
     setSub("be");
+    renderBe();
   });
   document.getElementById("sub-hedge").addEventListener("click", function () {
     setSub("hedge");
+    renderHedge();
   });
 
   document.getElementById("form-perp").addEventListener("submit", function (event) {
@@ -527,7 +775,8 @@
     document.getElementById("maker").value = "0.0002";
     document.getElementById("entry-liq").value = "taker";
     document.getElementById("exit-liq").value = "taker";
-    document.getElementById("funding").value = "0";
+    document.getElementById("funding-8h").value = "0";
+    document.getElementById("hold-hours").value = "8";
     document.getElementById("mmr").value = "0.005";
     document.getElementById("margin-mode").value = "isolated";
     document.getElementById("targets").value = "110, 120";
@@ -544,7 +793,8 @@
     document.getElementById("leverage").value = "20";
     document.getElementById("taker").value = "0";
     document.getElementById("maker").value = "0";
-    document.getElementById("funding").value = "0";
+    document.getElementById("funding-8h").value = "0";
+    document.getElementById("hold-hours").value = "8";
     document.getElementById("mmr").value = "0.005";
     document.getElementById("margin-mode").value = "isolated";
     document.getElementById("targets").value = "110";
@@ -620,5 +870,5 @@
     renderHedge();
   });
 
-  renderPerp(false);
+  if (!applyHash()) renderPerp(false);
 })();

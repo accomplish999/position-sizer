@@ -52,12 +52,25 @@ export function formatPerp(result: PerpResult): string {
   lines.push(line("entry fee", roundTrip(result.entryFee)));
   lines.push(line("exit fee at stop", roundTrip(result.exitFeeAtStop)));
   lines.push(line("funding", roundTrip(result.fundingCost)));
+  if (result.fundingPer8h !== null && result.holdHours !== null) {
+    lines.push(line("funding per 8h", roundTrip(result.fundingPer8h)));
+    lines.push(line("hold hours", roundTrip(result.holdHours)));
+  }
+  lines.push(line("breakeven", roundTrip(result.breakevenPrice)));
   if (result.targets.length > 0) {
     lines.push("");
     lines.push("targets");
     for (const target of result.targets) {
+      const share = target.closePercent === null ? "" : `close ${roundTrip(target.closePercent)}%   `;
       lines.push(
-        `  ${roundTrip(target.price)}   ${roundTrip(target.rMultiple)} R   net ${roundTrip(target.netPnl)}   price-only ${roundTrip(target.priceOnlyR)} R`,
+        `  ${roundTrip(target.price)}   ${share}${roundTrip(target.rMultiple)} R   net ${roundTrip(target.netPnl)}   price-only ${roundTrip(target.priceOnlyR)} R`,
+      );
+    }
+    if (result.blended) {
+      lines.push("");
+      lines.push("blended");
+      lines.push(
+        `  close ${roundTrip(result.blended.closePercent)}%   ${roundTrip(result.blended.rMultiple)} R   net ${roundTrip(result.blended.netPnl)}   on full risk ${roundTrip(result.blended.rOnFullRisk)} R`,
       );
     }
   }

@@ -16,11 +16,14 @@ export type {
   MarginMode,
   PerpInput,
   PerpResult,
+  BlendedResult,
   RLevelResult,
   RiskInput,
   RiskMode,
   Side,
+  TargetInput,
   TargetResult,
+  TargetSpec,
   Warning,
 } from "./perp";
 export {

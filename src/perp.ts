@@ -18,13 +18,37 @@ export interface Warning {
   message: string;
 }
 
+/** A price, or a price plus the percent of the original size to close there. */
+export interface TargetInput {
+  price: number;
+  /** 50 means half the original size. Omit for a full-size scenario. */
+  closePercent?: number;
+}
+
+export type TargetSpec = number | TargetInput;
+
 export interface TargetResult {
   price: number;
+  /**
+   * Percent of the original size closed here.
+   * Null when the target is a full-size scenario, not a partial close.
+   */
+  closePercent: number | null;
   netPnl: number;
-  /** Net result divided by the fee-adjusted loss at the stop. */
+  /** Net of this close divided by the fee-adjusted loss of the size it closes. */
   rMultiple: number;
   /** Price move divided by the stop distance. Fees ignored. */
   priceOnlyR: number;
+}
+
+export interface BlendedResult {
+  /** Sum of the close percents. At most 100. */
+  closePercent: number;
+  netPnl: number;
+  /** Closed P&L divided by the fee-adjusted loss of the closed size. */
+  rMultiple: number;
+  /** Closed P&L divided by the fee-adjusted loss of the whole position. */
+  rOnFullRisk: number;
 }
 
 export interface RLevelResult {
@@ -48,8 +72,16 @@ export interface PerpInput {
   /**
    * Signed fraction of entry notional over the hold you expect.
    * Positive means you pay. Negative means you receive.
+   * Do not pass this together with fundingPer8h.
    */
   fundingRate?: number;
+  /**
+   * Market funding rate for one 8 hour period, as a fraction of notional.
+   * Positive means longs pay shorts. Pair it with holdHours.
+   */
+  fundingPer8h?: number;
+  /** Expected hold, in hours. The cost is fundingPer8h times holdHours / 8. */
+  holdHours?: number;
   /** Fraction of mark notional. 0.005 is 0.5 percent. */
   maintenanceMarginRate: number;
   /**
@@ -62,7 +94,11 @@ export interface PerpInput {
    * before liquidation is estimated. Default true.
    */
   entryFeeFromMargin?: boolean;
-  targets?: number[];
+  /**
+   * Bare prices are full-size scenarios. Objects with closePercent are partial closes.
+   * Do not mix the two in one list.
+   */
+  targets?: TargetSpec[];
   /** Net R levels to solve for a price. Default 1, 2, 3. The stop is always -1. */
   rMultiples?: number[];
 }
@@ -104,13 +140,22 @@ export interface PerpResult {
   entryFee: number;
   exitFeeAtStop: number;
   fundingCost: number;
+  /** Market rate per 8 hours. Null when you passed a flat fundingRate instead. */
+  fundingPer8h: number | null;
+  /** Hold used with fundingPer8h. Null when you passed a flat fundingRate. */
+  holdHours: number | null;
+  /** Full-close price where net P&L is zero after fees and funding. */
+  breakevenPrice: number;
   entryFeeRate: number;
   exitFeeRate: number;
+  /** Signed fraction of entry notional you pay over the hold. Positive means you pay. */
   fundingRate: number;
   maintenanceMarginRate: number;
   closeFeeRate: number;
   entryFeeFromMargin: boolean;
   targets: TargetResult[];
+  /** Set when the targets are partial closes. Null for full-size scenarios. */
+  blended: BlendedResult | null;
   rLevels: RLevelResult[];
   warnings: Warning[];
 }
@@ -234,6 +279,91 @@ function liquidationEstimate(side: Side, price: number, stop: number): Liquidati
   };
 }
 
+interface ResolvedFunding {
+  /** Signed fraction of entry notional you pay. Positive means you pay. */
+  fundingRate: number;
+  fundingPer8h: number | null;
+  holdHours: number | null;
+}
+
+function resolveFunding(input: PerpInput, side: Side): ResolvedFunding {
+  const hasFlat = input.fundingRate !== undefined;
+  const hasSchedule = input.fundingPer8h !== undefined || input.holdHours !== undefined;
+  if (hasFlat && hasSchedule) {
+    throw new InputError("FUNDING_RATE", "Pass fundingRate, or fundingPer8h with holdHours. Not both.");
+  }
+  if (hasSchedule) {
+    if (input.fundingPer8h === undefined || input.holdHours === undefined) {
+      throw new InputError("FUNDING_RATE", "Funding per 8h and hold hours are a pair.");
+    }
+    const fundingPer8h = reqFinite("fundingPer8h", input.fundingPer8h);
+    const holdHours = reqFinite("holdHours", input.holdHours);
+    if (!(holdHours > 0)) {
+      throw new InputError("FUNDING_RATE", "Hold hours must be above 0.");
+    }
+    if (fundingPer8h <= -1 || fundingPer8h >= 1) {
+      throw new InputError(
+        "FUNDING_RATE",
+        "Funding per 8h must sit strictly between -1 and 1. It is a fraction of notional.",
+      );
+    }
+    const periods = holdHours / 8;
+    const market = fundingPer8h * periods;
+    const fundingRate = side === "long" ? market : -market;
+    if (fundingRate <= -1 || fundingRate >= 1) {
+      throw new InputError(
+        "FUNDING_RATE",
+        "Funding over the hold must sit strictly between -1 and 1. Shorten the hold or the 8h rate.",
+      );
+    }
+    return { fundingRate, fundingPer8h, holdHours };
+  }
+  const fundingRate = input.fundingRate === undefined ? 0 : reqFinite("fundingRate", input.fundingRate);
+  if (fundingRate <= -1 || fundingRate >= 1) {
+    throw new InputError(
+      "FUNDING_RATE",
+      "Funding rate must sit strictly between -1 and 1. It is a fraction of entry notional.",
+    );
+  }
+  return { fundingRate, fundingPer8h: null, holdHours: null };
+}
+
+interface NormalizedTarget {
+  price: number;
+  closePercent: number | null;
+}
+
+function normalizeTargets(raw: TargetSpec[] | undefined): NormalizedTarget[] {
+  if (raw === undefined || raw.length === 0) return [];
+  const parsed = raw.map((item) => {
+    if (typeof item === "number") {
+      return { price: reqPositive("target", item), closePercent: null };
+    }
+    if (item === null || typeof item !== "object") {
+      throw new InputError("TARGET", "A target is a price, or a price and a close percent.");
+    }
+    const price = reqPositive("target", item.price);
+    if (item.closePercent === undefined) return { price, closePercent: null };
+    const closePercent = reqFinite("closePercent", item.closePercent);
+    if (!(closePercent > 0) || closePercent > 100) {
+      throw new InputError("TARGET_SHARE", "A close percent has to be above 0 and at most 100.");
+    }
+    return { price, closePercent };
+  });
+  const partial = parsed.some((target) => target.closePercent !== null);
+  const scenario = parsed.some((target) => target.closePercent === null);
+  if (partial && scenario) {
+    throw new InputError("TARGET_SHARE", "Give every target a close percent, or give none. Do not mix the two.");
+  }
+  if (partial) {
+    const sum = parsed.reduce((total, target) => total + (target.closePercent ?? 0), 0);
+    if (sum > 100 + 1e-9) {
+      throw new InputError("TARGET_SHARE", "Close percents add up to more than 100.");
+    }
+  }
+  return parsed;
+}
+
 function netAt(input: {
   side: Side;
   qty: number;
@@ -310,13 +440,8 @@ export function sizePerp(input: PerpInput): PerpResult {
   const exitFeeRate = pickFee(exitLiquidity, takerFee, makerFee);
   const closeFeeRate = takerFee;
 
-  const fundingRate = input.fundingRate === undefined ? 0 : reqFinite("fundingRate", input.fundingRate);
-  if (fundingRate <= -1 || fundingRate >= 1) {
-    throw new InputError(
-      "FUNDING_RATE",
-      "Funding rate must sit strictly between -1 and 1. It is a fraction of entry notional.",
-    );
-  }
+  const funding = resolveFunding(input, side);
+  const fundingRate = funding.fundingRate;
 
   const maintenanceMarginRate = reqFinite("maintenanceMarginRate", input.maintenanceMarginRate);
   if (maintenanceMarginRate < 0 || maintenanceMarginRate >= 1) {
@@ -396,12 +521,44 @@ export function sizePerp(input: PerpInput): PerpResult {
   const bankruptWallet = marginMode === "isolated" ? isolatedWallet : crossWallet;
   const bankrupt = bankruptcyPrice({ entry, qty, wallet: bankruptWallet, side });
 
-  const targets = (input.targets ?? []).map((price) => {
-    const px = reqPositive("target", price);
-    const netPnl = netAt({ side, qty, entry, price: px, entryFeeRate, exitFeeRate, fundingRate });
-    const rMultiple = feeAdjustedRisk === 0 ? 0 : netPnl / feeAdjustedRisk;
-    const priceOnlyR = side === "long" ? (px - entry) / priceGap : (entry - px) / priceGap;
-    return { price: px, netPnl, rMultiple, priceOnlyR };
+  const specs = normalizeTargets(input.targets);
+  const partial = specs.some((target) => target.closePercent !== null);
+  const targets: TargetResult[] = specs.map((spec) => {
+    const fraction = spec.closePercent === null ? 1 : spec.closePercent / 100;
+    const netPnl = netAt({
+      side,
+      qty: qty * fraction,
+      entry,
+      price: spec.price,
+      entryFeeRate,
+      exitFeeRate,
+      fundingRate,
+    });
+    const sliceRisk = feeAdjustedRisk * fraction;
+    const rMultiple = sliceRisk === 0 ? 0 : netPnl / sliceRisk;
+    const priceOnlyR = side === "long" ? (spec.price - entry) / priceGap : (entry - spec.price) / priceGap;
+    return { price: spec.price, closePercent: spec.closePercent, netPnl, rMultiple, priceOnlyR };
+  });
+  let blended: BlendedResult | null = null;
+  if (partial) {
+    const closePercent = targets.reduce((total, target) => total + (target.closePercent ?? 0), 0);
+    const netPnl = targets.reduce((total, target) => total + target.netPnl, 0);
+    const closedRisk = feeAdjustedRisk * (closePercent / 100);
+    blended = {
+      closePercent,
+      netPnl,
+      rMultiple: closedRisk === 0 ? 0 : netPnl / closedRisk,
+      rOnFullRisk: feeAdjustedRisk === 0 ? 0 : netPnl / feeAdjustedRisk,
+    };
+  }
+  const breakevenPrice = priceForNet({
+    side,
+    qty,
+    entry,
+    entryFeeRate,
+    exitFeeRate,
+    fundingRate,
+    net: 0,
   });
 
   const rList = input.rMultiples === undefined ? [1, 2, 3] : input.rMultiples;
@@ -452,6 +609,13 @@ export function sizePerp(input: PerpInput): PerpResult {
       message: "The risk budget is larger than the account.",
     });
   }
+  if (blended !== null && blended.closePercent < 100 - 1e-9) {
+    warnings.push({
+      code: "TARGETS_LEAVE_A_REST",
+      severity: "note",
+      message: "The targets close part of the size. The rest stays open and is not in the blended result.",
+    });
+  }
 
   return {
     side,
@@ -475,6 +639,9 @@ export function sizePerp(input: PerpInput): PerpResult {
     entryFee,
     exitFeeAtStop,
     fundingCost,
+    fundingPer8h: funding.fundingPer8h,
+    holdHours: funding.holdHours,
+    breakevenPrice,
     entryFeeRate,
     exitFeeRate,
     fundingRate,
@@ -482,6 +649,7 @@ export function sizePerp(input: PerpInput): PerpResult {
     closeFeeRate,
     entryFeeFromMargin,
     targets,
+    blended,
     rLevels,
     warnings,
   };

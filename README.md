@@ -4,9 +4,9 @@ Size the loss before you size the trade.
 
 Fees go into the denominator. If liquidation sits before the stop, the stop does not cap the loss. The same release prices a liquidity position: a constant-product pool, one concentrated range, a deposit that fits a quote budget, the fee APR that would cover that loss, and the short that flats base at one price.
 
-The hosted calculator is <https://accomplish999.github.io/position-sizer/>.
+The hosted calculator is <https://accompli.sh/position-sizer/>.
 
-![Perps tab. Account 10000, risk 1 percent, long from 100, stop 95, leverage cap 10. Size 19.6175 base. Liquidation 90.55 sits below the stop.](docs/images/calc-perps.png)
+![Perps tab. Account 10000, risk 1 percent, long from 100, stop 95, leverage cap 10. Funding 0.0001 per 8 hours for 24 hours. Targets 110 at 50 percent and 120 at 50 percent. Size 19.5027 base. Breakeven 100.13. Blended 2.90 R. Copy link sits by the tabs.](docs/images/calc-perps.png)
 
 This is arithmetic. It is not a signal, and it is not advice. Past results do not predict future results.
 
@@ -18,6 +18,7 @@ This is arithmetic. It is not a signal, and it is not advice. Past results do no
 - [Exact rules](#exact-rules)
 - [Data and method](#data-and-method)
 - [Worked results](#worked-results)
+- [Historical checks](#historical-checks)
 - [Limitations](#limitations)
 - [Failure modes](#failure-modes)
 - [When not to use it](#when-not-to-use-it)
@@ -31,7 +32,7 @@ The formula writeups, with the same identities, are [docs/PERPS.md](docs/PERPS.m
 
 ## Thesis
 
-A risk percent that ignores the stop is not a size. On a linear perpetual, the quote you lose if the stop fills is the price gap, plus the fee to get in, plus the fee to get out at the stop, plus the funding you typed for the hold. Quantity is the risk budget divided by that unit loss, then cut if the leverage cap cannot open that much. Version 0.1.0 is that arithmetic.
+A risk percent that ignores the stop is not a size. On a linear perpetual, the quote you lose if the stop fills is the price gap, plus the fee to get in, plus the fee to get out at the stop, plus the funding you typed for the hold. Quantity is the risk budget divided by that unit loss, then cut if the leverage cap cannot open that much. Version 0.2.0 is that arithmetic, plus partial closes and a funding hold.
 
 The second calculator is a liquidity position. Constant product is the 50/50 pool. Concentrated is one range, liquidity L between two prices, valued with square-root prices in the sense of the Uniswap v3 paper. It is not a list of ticks, and it is not a share of someone else's fee tier. Impermanent loss is pool value over the marked value of the tokens you deposited, minus 1. That fraction does not shrink when you deposit less. The quote gap does. The size uses the gap.
 
@@ -92,7 +93,7 @@ unit loss = |entry - stop|
 quantity from risk = risk budget / unit loss
 ```
 
-The entry fee rate is the taker or maker rate you assigned to the entry. The exit fee rate is the one you assigned to the stop. Both default to the taker rate. Funding is a signed fraction of entry notional over the hold you expect. Positive means you pay. Negative means you receive. A funding credit reduces the fee-adjusted risk. A funding payment increases it.
+The entry fee rate is the taker or maker rate you assigned to the entry. The exit fee rate is the one you assigned to the stop. Both default to the taker rate. Funding is a signed fraction of entry notional over the hold you expect. Positive means you pay. Negative means you receive. Pass that fraction as `fundingRate`, or pass `fundingPer8h` with `holdHours`. The second form multiplies the 8 hour rate by `holdHours / 8`. A positive 8 hour rate means longs pay and shorts receive, so the signed cost flips with the side. Do not pass both forms. A funding credit reduces the fee-adjusted risk. A funding payment increases it.
 
 If unit loss is not positive, fees and funding turned the stop into a credit. The calculator stops. There is nothing to size. When the risk quantity is the one you get, the fee-adjusted loss at the stop equals the budget.
 
@@ -178,6 +179,7 @@ A loud warning fires when the selected liquidation is on the wrong side of the s
 | `FULL_ACCOUNT_STILL_LIQUIDATES_FIRST` | loud     | Isolated, and the full-account price is also on the wrong side. |
 | `LEVERAGE_CAP_BINDS`                  | note     | Size was cut. Fee-adjusted risk is below the budget.            |
 | `RISK_BUDGET_ABOVE_ACCOUNT`           | note     | The fixed risk budget is larger than the account.               |
+| `TARGETS_LEAVE_A_REST`                | note     | Partial closes add up to less than 100 percent.                 |
 
 `--strict` turns a loud warning into exit code 3. The body is still printed. Exit 0 does not mean the stop is safe. Read `stop hits first`.
 
@@ -210,7 +212,9 @@ long:  (target - entry) / (entry - stop)
 short: (entry - target) / (stop - entry)
 ```
 
-The calculator also solves the net-pnl equation for price at R = -1, 1, 2, and 3, unless you pass your own list. R = -1 comes back as the stop. On a long, with per-price sensitivity `quantity * (1 - exit fee rate)`, the price at a chosen net is `(net + quantity * entry * (1 + entry fee rate + funding rate))` divided by that sensitivity.
+The calculator also solves the net-pnl equation for price at R = -1, 1, 2, and 3, unless you pass your own list. R = -1 comes back as the stop. On a long, with per-price sensitivity `quantity * (1 - exit fee rate)`, the price at a chosen net is `(net + quantity * entry * (1 + entry fee rate + funding rate))` divided by that sensitivity. Net zero is the breakeven price. Fees and funding push it off the entry.
+
+A target can close part of the size. `110:50` closes 50 percent at 110. Each row's R divides that slice's net by the fee-adjusted loss of the slice, so it matches a full exit at the same price. Blended net is the sum of the slices. Blended R divides that sum by the fee-adjusted loss of the closed size. On full risk, the same sum is divided by the loss of the whole position. Close percents have to be above 0 and at most 100, and they cannot add past 100. A bare price is still a full-size scenario, and those rows are not blended. Do not mix the two. If the percents add to less than 100, the rest stays open and is left out of the blend.
 
 ### Constant product IL
 
@@ -348,7 +352,7 @@ The short offsets the slope. It does not cancel the curve. Run the helper again 
 
 This repository does not score a trading rule. There is no candle file, no walk-forward, no holdout, and no multiple-testing correction, because there is no search over signals. The method is the identity in the source, locked by tests, and printed by the CLI from the objects in [examples/](examples/).
 
-Release 0.1.0. The version string in `package.json` and in `src/version.ts` is 0.1.0. `npx tsx src/cli.ts --version` prints `0.1.0`. The blocks in [Worked results](#worked-results) were produced by that CLI in this tree.
+Release 0.2.0. The version string in `package.json` and in `src/version.ts` is 0.2.0. `npx tsx src/cli.ts --version` prints `0.2.0`. The blocks in [Worked results](#worked-results) are that CLI's full print. [Historical checks](#historical-checks) quote the same printer, cut down to the size, the funding, the breakeven, and the closes.
 
 Text mode rounds. A magnitude of at least 1,000 keeps 4 digits after the decimal, a magnitude of at least 1 keeps 6, and a smaller magnitude keeps 8, then trailing zeros drop. JSON keeps the full double. Do not retype a rounded line into another tool and expect the tests to match.
 
@@ -433,6 +437,7 @@ price risk                  98.087298
 entry fee                   0.98087298
 exit fee at stop            0.93182933
 funding                     0
+breakeven                   100.10005
 
 targets
   110   1.941148 R   net 194.114762   price-only 2 R
@@ -445,11 +450,11 @@ R to price
   3 R   price 115.4002
 ```
 
-The price-only column still says 2 R at 110. After fees it is 1.941148 R. The 2 R price, net of fees, is 110.30015, not 110. Fee-adjusted risk equals the budget of 100. The three fee lines are the rounded split of that sum. The full account cannot liquidate this long: notional prints as 1961.746 against a 10,000 account, so that price is reported as 0. Bankruptcy at 90.05 sits below liquidation at 90.548014, which is the right order for a long.
+The price-only column still says 2 R at 110. After fees it is 1.941148 R. Breakeven, a full close at zero net, is 100.10005. The 2 R price, net of fees, is 110.30015, not 110. Fee-adjusted risk equals the budget of 100. The three fee lines are the rounded split of that sum. The full account cannot liquidate this long: notional prints as 1961.746 against a 10,000 account, so that price is reported as 0. Bankruptcy at 90.05 sits below liquidation at 90.548014, which is the right order for a long.
 
-The hosted page rounds that same long for the screen. The CLI block above keeps the longer print.
+The CLI block above keeps the longer print. The page shot under it is the same entry and stop with a funding hold and two partial closes, so the size is not the 19.61746 from the zero-funding run.
 
-![Perps tab for the worked long. Account 10000, risk 1 percent, entry 100, stop 95. The ladder shows liquidation at 90.55, under the stop.](docs/images/calc-perps.png)
+![Same prices on the page, with a funding hold and two partial closes. Liquidation still prints 90.55, under the stop. The target rows show the close percent, the R, and the net, then the blend.](docs/images/calc-perps.png)
 
 ### Chart of the fee long
 
@@ -493,6 +498,7 @@ price risk                  100
 entry fee                   0
 exit fee at stop            0
 funding                     0
+breakeven                   100
 
 targets
   90   1 R   net 100   price-only 1 R
@@ -544,6 +550,7 @@ price risk                  100
 entry fee                   0
 exit fee at stop            0
 funding                     0
+breakeven                   100
 
 targets
   110   1 R   net 100   price-only 1 R
@@ -638,7 +645,7 @@ in range                    yes
 
 The hosted page marks that range at the upper price. IL versus holding prints as minus 4.76 percent.
 
-![DeFi tab, one range. Entry 100, lower 81, upper 121, price now 121, deposit 1000. The position is all quote and IL versus holding is minus 4.76 percent.](docs/images/calc-defi.png)
+![DeFi tab, one range. Entry 100, lower 81, upper 121, price now 121, deposit 1000. The position is all quote and IL versus holding is minus 4.76 percent. Copy link sits by the tabs.](docs/images/calc-defi.png)
 
 ### Chart of the range
 
@@ -881,6 +888,133 @@ price up                    121
 
 The test checks the up price against 121 within 1e-4, then checks that the loss at the returned up price matches 1/21 within 1e-6. The down price is the search result. There is no closed form for it in the docs.
 
+## Historical checks
+
+Three perp sizings and one concentrated range, on published OKX prints. The account, the 1 percent risk, the leverage cap of 10, and zero fees are inputs for this note. They are not a live account. OKX charges a fee that depends on the account tier, and this run does not pick a tier. Maintenance margin is 0.004, the tier-1 `mmr` from `position-tiers` for these families, read on 2026-10-07. That call is not a September archive.
+
+Candles are `1Dutc` from `https://www.okx.com/api/v5/market/history-candles`. Funding is `realizedRate` from `https://www.okx.com/api/v5/public/funding-rate-history`. Contract value is `ctVal` from `https://www.okx.com/api/v5/public/instruments`. The tool sizes base. OKX orders are in contracts. Divide base by `ctVal`. The tool does not round to lot size.
+
+Each perp enters at the 2026-09-03 00:00 UTC open. The stop is the prior day's low, already printed. The two targets are the 2026-09-03 close and the 2026-09-03 high, half the size at each. Both prices printed on that daily candle. A daily candle does not say which came first, so this is not a fill sequence. The funding input is the settlement at 2026-09-03 00:00 UTC, held flat for 24 hours, which is three periods. The next three settlements, 08:00, 16:00, and the following 00:00, are listed after the output. They are not what the flat rate assumed.
+
+### BTC-USDT-SWAP, 2026-09-03
+
+Candle `1788393600000`: open 77303.7, high 82279.9, low 76926, close 81228.7. Prior candle `1788307200000`: low 76204.5. Funding at the open: 0.0000583196496528. `ctVal` 0.01.
+
+```text
+side                        long
+margin mode                 isolated
+position size (base)        0.08986947
+position size (quote)       6947.2423
+notional                    6947.2423
+margin needed               694.724229
+effective leverage          0.69472423
+leverage cap                10
+entry                       77303.7
+stop                        76204.5
+liquidation                 69852.741
+liquidation vs stop         6351.759
+stop hits first             yes
+funding                     1.215482
+funding per 8h              0.00005832
+hold hours                  24
+breakeven                   77317.225
+
+targets
+  81228.7   close 50%   3.515222 R   net 175.761087   price-only 3.570779 R
+  82279.9   close 50%   4.45993 R   net 222.996479   price-only 4.527111 R
+
+blended
+  close 100%   3.987576 R   net 398.757566   on full risk 3.987576 R
+```
+
+The printed 8 hour rate is the CLI rounding of 0.0000583196496528. Base 0.08986947 is 8.986947 contracts at `ctVal` 0.01. The day's low was 76926, above the stop at 76204.5. Liquidation at 69852.741 was not in that day's range.
+
+The next three settlements were 0.0000457850394567, 0.0000383236146165, and 0.0000418741079605. They sum to 0.0001259827620337. The flat input was 0.0001749589489584. On this notional the flat estimate is 0.340249 quote more than those three charges.
+
+### ETH-USDT-SWAP, 2026-09-03
+
+Candle `1788393600000`: open 2390.96, high 2530.5, low 2368.73, close 2506.23. Prior candle low 2355.56. Funding at the open: 0.0001. `ctVal` 0.1.
+
+```text
+side                        long
+position size (base)        2.768757
+position size (quote)       6619.9876
+notional                    6619.9876
+margin needed               661.998764
+entry                       2390.96
+stop                        2355.56
+liquidation                 2160.506
+liquidation vs stop         195.053976
+stop hits first             yes
+funding                     1.985996
+funding per 8h              0.0001
+hold hours                  24
+breakeven                   2391.6773
+
+targets
+  2506.23   close 50%   3.171686 R   net 158.584321   price-only 3.256215 R
+  2530.5   close 50%   3.843664 R   net 192.183189   price-only 3.941808 R
+
+blended
+  close 100%   3.507675 R   net 350.767511   on full risk 3.507675 R
+```
+
+Base 2.768757 is 27.68757 contracts at `ctVal` 0.1. The day's low was 2368.73, above the stop. The next three settlements were 0.0000386701308021, 0.000037410071876, and 0.0001. They sum to 0.0001760802026781. The flat input was 0.0003. On this notional the flat estimate is 0.820348 quote more than those three charges.
+
+### SOL-USDT-SWAP, 2026-09-03
+
+Candle `1788393600000`: open 100.38, high 105.89, low 99.09, close 103.87. Prior candle low 97.31. Funding at the open: 0.0000131256086078. `ctVal` 1.
+
+```text
+side                        long
+position size (base)        32.531405
+position size (quote)       3265.5025
+notional                    3265.5025
+margin needed               326.550248
+entry                       100.38
+stop                        97.31
+liquidation                 90.704819
+liquidation vs stop         6.605181
+stop hits first             yes
+funding                     0.12858512
+funding per 8h              0.00001313
+hold hours                  24
+breakeven                   100.383953
+
+targets
+  103.87   close 50%   1.13406 R   net 56.70301   price-only 1.136808 R
+  105.89   close 50%   1.791195 R   net 89.55973   price-only 1.794788 R
+
+blended
+  close 100%   1.462627 R   net 146.26274   on full risk 1.462627 R
+```
+
+The printed 8 hour rate rounds 0.0000131256086078. Base 32.531405 is the same number of contracts at `ctVal` 1. The day's low was 99.09, above the stop. The next three settlements were 0.00000993789702, 0.0000300980923523, and 0.0000650156840406. They sum to 0.0001050516734129. The flat input was 0.0000393768258234. On this notional the flat estimate is 0.214461 quote less than those three charges. The rate rose after the open. A flat hold did not see that.
+
+### ETH concentrated range, 2026-08-29 to 2026-09-07
+
+This is the Uniswap v3 concentrated model in this repo, not an on-chain position. The prices are OKX ETH-USDT-SWAP daily fields.
+
+Entry is the 2026-08-29 close, candle `1787961600000`, close 2456.4. The lower bound is the window's lowest low, 2355.56 on 2026-09-02. The upper bound is the window's highest high, 2548.37 on 2026-09-04. Price now is the 2026-09-07 close, candle `1788739200000`, close 2488.99. Deposit 10,000 quote is an input for the note.
+
+```text
+model                       concentrated
+price entry                 2456.4
+price now                   2488.99
+price ratio                 1.013267
+deposit                     10000
+value now                   10050.8043
+hold value                  10062.0275
+IL fraction                 -0.0011154
+divergence (quote)          11.223203
+drawdown vs deposit         -50.804329
+base now                    1.21678
+quote now                   7022.2523
+in range                    yes
+```
+
+The pool stayed inside the range on these daily extremes, because the bounds are the min low and the max high of the window. Value now is 10050.8043 against a 10,000 deposit, so drawdown vs deposit prints negative. Holding the starting coins would have been worth 10062.0275. The pool lags that hold by 11.223203 quote. IL fraction is -0.0011154.
+
 ## Limitations
 
 If a venue's published liquidation formula disagrees with the equity identity, believe the venue for that venue.
@@ -981,9 +1115,9 @@ npx tsx src/cli.ts perp --file examples/perp-long.json --json
 npx tsx src/cli.ts defi il --file examples/defi-constant-product.json --json
 ```
 
-A bare fee, maintenance rate, funding rate, or loss is a fraction. A trailing `%` divides by 100, so `--mmr 0.5%` and `--mmr 0.005` match. `--target` and `--r` can be repeated.
+A bare fee, maintenance rate, funding rate, or loss is a fraction. A trailing `%` divides by 100, so `--mmr 0.5%` and `--mmr 0.005` match. `--target` and `--r` can be repeated. `--target 110:50%` closes half at 110. `--funding-8h` with `--hold-hours` replaces `--funding`.
 
-Perp flags: `--account`, `--risk` or `--risk-percent` or `--risk-fixed`, `--entry`, `--stop`, `--side long|short`, `--leverage`, `--taker`, `--maker`, `--mmr`, `--entry-liquidity taker|maker`, `--exit-liquidity taker|maker`, `--funding`, `--margin isolated|cross`, `--entry-fee-from-margin true|false`, `--target`, `--r`.
+Perp flags: `--account`, `--risk` or `--risk-percent` or `--risk-fixed`, `--entry`, `--stop`, `--side long|short`, `--leverage`, `--taker`, `--maker`, `--mmr`, `--entry-liquidity taker|maker`, `--exit-liquidity taker|maker`, `--funding` or `--funding-8h` with `--hold-hours`, `--margin isolated|cross`, `--entry-fee-from-margin true|false`, `--target`, `--r`.
 
 `defi il` and `defi hedge`: `--model constant-product|concentrated`, `--entry`, `--price`, `--deposit`, and `--lower` plus `--upper` when the model is concentrated.
 
@@ -997,7 +1131,7 @@ The full flag list is [docs/CLI.md](docs/CLI.md). The printed text for the examp
 
 ## Library
 
-The package is not on the npm registry. Clone it, or depend on the git tag `v0.1.0`. The import below resolves after `npm run build`. Tests import the TypeScript directly.
+The package is not on the npm registry. Clone it, or depend on the git tag `v0.2.0`. The import below resolves after `npm run build`. Tests import the TypeScript directly.
 
 ```ts
 import { sizePerp, impermanentLoss, sizeLp, feeBreakeven, hedgeRatio } from "position-sizer";
@@ -1026,13 +1160,15 @@ Also exported: `constantProductIl`, `priceRatiosForIl`, `lossBounds`, `concentra
 
 The same functions run in the browser. Nothing you type is sent anywhere.
 
-Hosted copy: <https://accomplish999.github.io/position-sizer/>.
+Hosted copy: <https://accompli.sh/position-sizer/>.
 
 Locally, `npm run build:web` writes `web/position-sizer.js`. Open [web/index.html](web/index.html) after that. The page needs JavaScript. The CLI does not.
 
-Two tabs. Perps is selected on load and already calculated. The fields are the fee long: account 10,000, risk mode percent, risk 1, side long, entry 100, stop 95, leverage cap 10, isolated, taker 0.0005, maker 0.0002, funding 0, maintenance margin 0.005, targets `110, 120`, entry fee taken from the backing wallet. `Example: 1% long` restores that and recalculates. `Example: liq before stop` loads the 20x case (stop 90, cap 20, fees 0, target 110) and recalculates. A loud warning shows in the same view as the size.
+Two tabs. Perps is selected on load and already calculated. The fields are the fee long: account 10,000, risk mode percent, risk 1, side long, entry 100, stop 95, leverage cap 10, isolated, taker 0.0005, maker 0.0002, funding per 8h at 0, hold 8 hours, maintenance margin 0.005, targets `110, 120`, entry fee taken from the backing wallet. `Example: 1% long` restores that and recalculates. `Example: liq before stop` loads the 20x case (stop 90, cap 20, fees 0, funding 0, target 110) and recalculates. A loud warning shows in the same view as the size.
 
-![Perps tab switching from the 1 percent long to liquidation before the stop. The stop, the leverage cap, and the size change, and a warning appears.](docs/images/calc-demo.gif)
+`Copy link` writes every field of the open tool into the URL hash and copies that URL. A hash is not sent with the page request. Opening the link restores the fields and calculates. `110:50, 120:50` is two partial closes. The result lists R and net for each, then the blend. Funding per 8h times hold hours over 8 is the funding in that net, and in the breakeven price.
+
+![Perps inputs moving from full exits at 110 and 120, to 50 percent closes at those prices, then to a funding rate of 0.0001 per 8 hours over 24 hours. Funding, breakeven, and the blended R update in the same view.](docs/images/calc-demo.gif)
 
 DeFi has four tools: IL, Size, Breakeven, Hedge.
 

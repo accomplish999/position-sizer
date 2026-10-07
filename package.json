@@ -1,6 +1,6 @@
 {
   "name": "position-sizer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Position size calculators for perpetual futures and liquidity pools.",
   "license": "MIT",
   "type": "commonjs",
@@ -23,7 +23,7 @@
     "type": "git",
     "url": "git+https://github.com/accomplish999/position-sizer.git"
   },
-  "homepage": "https://accomplish999.github.io/position-sizer/",
+  "homepage": "https://accompli.sh/position-sizer/",
   "scripts": {
     "build": "tsc --pretty false && npm run build:web",
     "build:web": "esbuild src/browser.ts --bundle --format=iife --global-name=PositionSizer --outfile=web/position-sizer.js --legal-comments=none",

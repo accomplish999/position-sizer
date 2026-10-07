@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- The hosted calculator is <https://accompli.sh/position-sizer/>.
+- Partial closes. A target can carry a close percent. Each row has a net and an R. The blend sums the closed slices.
+- Funding per 8 hours and a hold in hours. That cost is in the size, the target nets, and the breakeven price.
+- The page keeps its inputs in the URL hash. Copy link copies that URL. Opening it restores the fields.
+
 ## 0.1.0
 
 First public release.

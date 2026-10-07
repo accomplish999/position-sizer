@@ -152,11 +152,23 @@ header h1 {
   padding: 0 20px 48px;
 }
 
+.tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+}
+
 .tabs,
 .subtabs {
   display: flex;
   gap: 0;
-  margin: 18px 0;
+  margin: 0;
+}
+
+.subtabs {
+  margin: 0 0 18px;
 }
 
 .tabs button,
@@ -238,6 +250,10 @@ select {
 .hint {
   margin: 8px 0 0;
   font-size: 12px;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
 }
 
 .out .hero {
